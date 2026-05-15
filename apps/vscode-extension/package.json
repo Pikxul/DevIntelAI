@@ -1,0 +1,59 @@
+{
+  "name": "aidevops-vscode",
+  "displayName": "AI DevOps — Intelligent Code Review",
+  "description": "AI-powered inline code review, risk scoring, and DevOps pipeline integration directly in VS Code",
+  "version": "0.1.0",
+  "publisher": "aidevops",
+  "engines": { "vscode": "^1.88.0" },
+  "categories": ["Other", "Linters", "Programming Languages"],
+  "keywords": ["AI", "DevOps", "Code Review", "Security", "CI/CD"],
+  "icon": "images/icon.png",
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "aidevops.reviewFile", "title": "AI DevOps: Review Current File", "icon": "$(robot)" },
+      { "command": "aidevops.reviewSelection", "title": "AI DevOps: Review Selection", "icon": "$(search)" },
+      { "command": "aidevops.reviewPR", "title": "AI DevOps: Review PR Diff", "icon": "$(git-pull-request)" },
+      { "command": "aidevops.openDashboard", "title": "AI DevOps: Open Dashboard", "icon": "$(dashboard)" },
+      { "command": "aidevops.configure", "title": "AI DevOps: Configure Settings", "icon": "$(settings-gear)" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "aidevops.reviewFile", "group": "aidevops" },
+        { "command": "aidevops.reviewSelection", "when": "editorHasSelection", "group": "aidevops" }
+      ]
+    },
+    "configuration": {
+      "title": "AI DevOps",
+      "properties": {
+        "aidevops.apiUrl": { "type": "string", "default": "http://localhost:3001", "description": "AI DevOps API endpoint URL" },
+        "aidevops.apiToken": { "type": "string", "default": "", "description": "API authentication token" },
+        "aidevops.riskThreshold": { "type": "number", "default": 70, "minimum": 0, "maximum": 100, "description": "Risk score threshold (0-100) to trigger warnings" },
+        "aidevops.autoReviewOnSave": { "type": "boolean", "default": false, "description": "Automatically run AI review on file save" },
+        "aidevops.showInlineAnnotations": { "type": "boolean", "default": true, "description": "Show inline code annotations in the editor" }
+      }
+    },
+    "statusBar": [{
+      "id": "aidevops.riskScore",
+      "alignment": "right",
+      "priority": 100
+    }]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build": "tsc -p ./",
+    "package": "vsce package",
+    "lint": "eslint src --ext ts"
+  },
+  "dependencies": {
+    "axios": "^1.6.8"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.88.0",
+    "@types/node": "^20.12.12",
+    "@vscode/vsce": "^2.26.0",
+    "typescript": "^5.4.5"
+  }
+}

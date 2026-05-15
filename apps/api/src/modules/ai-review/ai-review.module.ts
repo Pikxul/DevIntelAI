@@ -1,0 +1,20 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bull';
+import { AIReviewResult } from '../../entities';
+import { AIReviewController } from './ai-review.controller';
+import { AIReviewService } from './ai-review.service';
+import { AIReviewProcessor } from './ai-review.processor';
+import { PipelinesModule } from '../pipelines/pipelines.module';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([AIReviewResult]),
+    BullModule.registerQueue({ name: 'ai-review' }),
+    PipelinesModule,
+  ],
+  controllers: [AIReviewController],
+  providers: [AIReviewService, AIReviewProcessor],
+  exports: [AIReviewService],
+})
+export class AIReviewModule {}

@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+buildCommand = "pnpm install && pnpm --filter @aidevops/api build"
+
+[deploy]
+startCommand = "pnpm --filter @aidevops/api start"
+healthcheckPath = "/api/v1/health"
+healthcheckTimeout = 100
+restartPolicyType = "on-failure"
+restartPolicyMaxRetries = 10

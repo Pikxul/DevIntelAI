@@ -1,0 +1,212 @@
+name: AI DevOps CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
+
+jobs:
+  # ─── Lint & Type Check ────────────────────────────────────────────────────────
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo lint
+      - run: pnpm turbo build --filter=@aidevops/shared-types --filter=@aidevops/ai-client
+
+  # ─── AI Code Review ───────────────────────────────────────────────────────────
+  ai-review:
+    name: AI Code Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR Diff
+        id: diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD -- '*.ts' '*.tsx' '*.js' '*.py' > pr.diff
+          echo "diff_size=$(wc -c < pr.diff)" >> $GITHUB_OUTPUT
+
+      - name: AI Review via API
+        if: steps.diff.outputs.diff_size > 100
+        run: |
+          DIFF=$(cat pr.diff | head -c 50000)
+          RESPONSE=$(curl -s -X POST "${{ secrets.AIDEVOPS_API_URL }}/api/v1/ai-review/github" \
+            -H "Authorization: Bearer ${{ secrets.AIDEVOPS_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"diff\": $(echo "$DIFF" | jq -Rs .), \"pipelineRunId\": \"gh-${{ github.run_id }}\"}")
+          
+          RISK=$(echo $RESPONSE | jq '.riskScore.overall // 0')
+          APPROVED=$(echo $RESPONSE | jq '.approved // true')
+          
+          echo "### 🤖 AI Code Review Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Risk Score:** $RISK/100" >> $GITHUB_STEP_SUMMARY
+          echo "- **Decision:** $([ "$APPROVED" = "true" ] && echo "✅ Approved" || echo "🚫 Blocked")" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$APPROVED" = "false" ]; then
+            echo "::error::AI Review blocked: Risk score $RISK exceeds threshold"
+            exit 1
+          fi
+
+  # ─── Security Scan ────────────────────────────────────────────────────────────
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/nodejs
+            p/typescript
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+      - name: Run Trivy (filesystem)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ─── Test ─────────────────────────────────────────────────────────────────────
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aidevops
+          POSTGRES_PASSWORD: aidevops
+          POSTGRES_DB: aidevops_test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo test
+        env:
+          DATABASE_URL: postgresql://aidevops:aidevops@localhost:5432/aidevops_test
+          REDIS_URL: redis://localhost:6379
+          NODE_ENV: test
+
+  # ─── Build Docker Images ──────────────────────────────────────────────────────
+  build:
+    name: Build & Push Docker
+    runs-on: ubuntu-latest
+    needs: [ai-review, security, test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Push API
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infra/docker/api.Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/aidevops-api:latest
+            ${{ secrets.DOCKER_USERNAME }}/aidevops-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & Push Web
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: infra/docker/web.Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/aidevops-web:latest
+            ${{ secrets.DOCKER_USERNAME }}/aidevops-web:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── Deploy ───────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+    steps:
+      - name: Notify AI DevOps of deployment
+        run: |
+          curl -X POST "${{ secrets.AIDEVOPS_API_URL }}/api/v1/deployments" \
+            -H "Authorization: Bearer ${{ secrets.AIDEVOPS_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "pipelineRunId": "gh-${{ github.run_id }}",
+              "imageTag": "${{ github.sha }}",
+              "target": {
+                "name": "production",
+                "environment": "production",
+                "type": "docker_compose",
+                "strategy": "rolling"
+              }
+            }'
+
+      - name: Notify Slack
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"text\": \"$( [ \"$STATUS\" = 'success' ] && echo '✅' || echo '❌') Deploy $STATUS — ${{ github.repository }} @ ${{ github.sha }}\"}"

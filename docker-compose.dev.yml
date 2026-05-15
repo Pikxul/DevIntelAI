@@ -1,0 +1,47 @@
+version: '3.9'
+
+# ─── DEV-ONLY: Just the data services ───────────────────────────────────────
+# Run: docker-compose -f docker-compose.dev.yml up -d
+# Then run API + Web with: pnpm dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aidevops-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aidevops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aidevops}
+      POSTGRES_DB: ${POSTGRES_DB:-aidevops}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aidevops}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: aidevops-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+
+networks:
+  default:
+    name: aidevops-dev-network

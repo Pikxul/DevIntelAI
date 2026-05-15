@@ -1,0 +1,15 @@
+# AI DevOps Platform
+
+node_modules
+dist
+.next
+out
+.turbo
+coverage
+*.env
+.env.local
+.env.production
+*.log
+.DS_Store
+Thumbs.db
+*.vsix
