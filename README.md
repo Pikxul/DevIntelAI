@@ -2,7 +2,7 @@
 
 > **AI-powered DevOps orchestration** — automated code review, risk analysis, deployment, and anomaly detection in one unified platform.
 
-[![CI](https://github.com/your-org/devintelai/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/devintelai/actions)
+[![CI](https://github.com/Pikxul/DevIntelAI/actions/workflows/ci.yml/badge.svg)](https://github.com/Pikxul/DevIntelAI/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](./LICENSE)
 [![pnpm](https://img.shields.io/badge/pnpm-9.x-orange)](https://pnpm.io)
 [![Node](https://img.shields.io/badge/node-20.x-green)](https://nodejs.org)
@@ -85,8 +85,8 @@ devintelai/
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/your-org/devintelai.git
-cd devintelai
+git clone https://github.com/Pikxul/DevIntelAI.git
+cd DevIntelAI
 cp .env.example .env          # Fill in your API keys
 powershell -ExecutionPolicy Bypass -Command "pnpm install"
 ```

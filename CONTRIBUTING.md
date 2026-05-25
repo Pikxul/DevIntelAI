@@ -27,8 +27,8 @@ Thank you for your interest in contributing! This guide covers the development w
 ### First-time Setup
 
 ```bash
-git clone https://github.com/your-org/aidevops.git
-cd aidevops
+git clone https://github.com/Pikxul/DevIntelAI.git
+cd DevIntelAI
 cp .env.example .env
 # Fill in OPENAI_API_KEY, ANTHROPIC_API_KEY, GITHUB_WEBHOOK_SECRET
 
