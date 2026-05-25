@@ -267,6 +267,7 @@ docker-compose up -d --scale api=3
 | [packages/shared-types/README.md](./packages/shared-types/README.md) | Shared type definitions |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | System architecture deep-dive |
 | [docs/API.md](./docs/API.md) | API endpoint reference |
+| [docs/WORKFLOWS.md](./docs/WORKFLOWS.md) | End-to-end workflow architecture |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Contribution guide |
 | [CHANGELOG.md](./CHANGELOG.md) | Release history |
 

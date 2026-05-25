@@ -1,6 +1,7 @@
 'use client';
 import { signIn } from 'next-auth/react';
 import { motion } from 'framer-motion';
+import { Zap, Terminal } from 'lucide-react';
 
 export default function SignInPage() {
   return (
@@ -17,9 +18,11 @@ export default function SignInPage() {
       >
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
-          <div className="logo-icon" style={{ fontSize: '1.5rem', width: 48, height: 48 }}>⚡</div>
+          <div className="logo-icon" style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Zap size={24} className="text-amber-500 fill-amber-500" />
+          </div>
           <span style={{ fontWeight: 800, fontSize: '1.5rem' }}>
-            AI<span className="gradient-text">DevOps</span>
+            DevIntel<span className="gradient-text">AI</span>
           </span>
         </div>
 
@@ -58,6 +61,20 @@ export default function SignInPage() {
             <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
           </svg>
           Continue with Google
+        </button>
+
+        <div style={{ margin: '1.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+          <span className="text-muted text-xs">OR</span>
+          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+        </div>
+
+        <button
+          onClick={() => signIn('credentials', { callbackUrl: '/dashboard' })}
+          className="btn btn-primary"
+          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+        >
+          <Terminal size={16} /> Continue as Dev User
         </button>
 
         <p className="text-muted text-xs" style={{ marginTop: '1.5rem' }}>

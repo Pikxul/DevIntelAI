@@ -106,4 +106,39 @@ export class NotificationsService {
       ],
     });
   }
+
+  async sendIncidentNotification(incident: any, rca: any, rollback: any): Promise<void> {
+    const channel = this.cfg.get<string>('SLACK_CHANNEL_ID', '#alerts');
+    const severityEmoji = incident.severity === 'critical' ? '🔥' : '🚨';
+    
+    await this.sendSlack({
+      channel,
+      text: `${severityEmoji} Incident: ${incident.title}`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*${severityEmoji} New Incident: ${incident.title}*\n*Severity:* ${incident.severity.toUpperCase()}\n*Environment:* ${incident.environment}\n*Source:* ${incident.source}\n*Description:* ${incident.description}`,
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*🧠 AI Root Cause Analysis*\n*Summary:* ${rca.summary}\n*Root Cause:* ${rca.rootCause}\n*Confidence:* ${rca.confidenceScore}%`,
+          },
+        },
+        ...(rollback ? [
+          {
+            type: 'section' as const,
+            text: {
+              type: 'mrkdwn',
+              text: `*🔄 Auto-Rollback Triggered*\n*Status:* ${rollback.status}\n*Reason:* ${rollback.reason}`,
+            }
+          }
+        ] : []),
+      ],
+    });
+  }
 }

@@ -12,6 +12,9 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
+import { PolicyEngineModule } from './modules/policy-engine/policy-engine.module';
+import { GovernanceModule } from './modules/governance/governance.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -51,6 +54,9 @@ import { GatewayModule } from './modules/gateway/gateway.module';
     NotificationsModule,
     ProjectsModule,
     GatewayModule,
+    PolicyEngineModule,
+    GovernanceModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}

@@ -47,10 +47,23 @@ export class PipelinesService {
     });
     const saved = await this.repo.save(run);
 
-    // Enqueue for AI review
-    await this.pipelineQueue.add('start', { pipelineRunId: saved.id, diff: dto.diff }, { attempts: 3 });
+    // Enqueue for full CI/CD processing
+    await this.pipelineQueue.add(
+      'start',
+      {
+        pipelineRunId: saved.id,
+        diff: dto.diff,
+        organizationId: dto.organizationId,
+        projectId: dto.projectId,
+        branch: dto.branch,
+        author: dto.author,
+        commitSha: dto.commitSha,
+      },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+    );
 
     return saved;
+
   }
 
   async findAll(organizationId: string, projectId?: string): Promise<PipelineRun[]> {

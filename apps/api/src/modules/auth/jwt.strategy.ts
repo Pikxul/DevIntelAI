@@ -18,8 +18,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       // Use NEXTAUTH_SECRET (same key Next.js uses to sign session JWTs)
-      // Falls back to JWT_SECRET for backward compatibility
-      secretOrKey: cfg.get<string>('NEXTAUTH_SECRET') ?? cfg.get<string>('JWT_SECRET', 'change-me'),
+      // Falls back to same string used in frontend auth.ts for dev
+      secretOrKey: cfg.get<string>('NEXTAUTH_SECRET') ?? cfg.get<string>('AUTH_SECRET') ?? 'ochhExgjtTPvCk/Dqpb0zkAGtQgdOeNV+2XGhsFPo/4=',
     });
   }
 

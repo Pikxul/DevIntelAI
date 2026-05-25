@@ -66,6 +66,152 @@ export interface AIReviewResult {
   createdAt: string;
 }
 
+export interface Deployment {
+  id: string;
+  pipelineRunId: string;
+  target: { environment: string; namespace?: string; cluster?: string };
+  imageTag: string;
+  previousImageTag?: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'rolled_back';
+  strategy: 'rolling' | 'blue_green' | 'canary';
+  canaryWeight?: number;
+  startedAt: string;
+  completedAt?: string;
+  rolledBackAt?: string;
+  rollbackReason?: string;
+}
+
+export interface DeploymentStats {
+  total: number;
+  succeeded: number;
+  failed: number;
+  rolledBack: number;
+  byStrategy: { rolling: number; blue_green: number; canary: number };
+}
+
+export interface Incident {
+  id: string;
+  projectId: string;
+  deploymentId?: string;
+  environment: string;
+  source: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+  metric?: string;
+  value?: number;
+  threshold?: number;
+  timestamp: string;
+  status?: 'open' | 'investigating' | 'resolved';
+}
+
+export interface RootCauseAnalysis {
+  id: string;
+  incidentId: string;
+  summary: string;
+  hypothesis: string;
+  rootCause: string;
+  affectedComponents: string[];
+  recommendedActions: string[];
+  confidenceScore: number;
+  generatedAt: string;
+}
+
+export interface AnomalyAlert {
+  id: string;
+  deploymentId: string;
+  type: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  title: string;
+  description: string;
+  metric: string;
+  currentValue: number;
+  expectedRange: { min: number; max: number };
+  confidence: number;
+  recommendation: string;
+  autoRollbackTriggered: boolean;
+  detectedAt: string;
+}
+
+export interface IncidentStats {
+  total: number;
+  active: number;
+  resolved: number;
+  avgMttr: string;
+  rcaGenerated: number;
+  autoRollbacks: number;
+}
+
+export interface Project {
+  id: string;
+  organizationId: string;
+  name: string;
+  slug: string;
+  repoUrl: string;
+  repoProvider: 'github' | 'gitlab';
+  defaultBranch: string;
+  riskThreshold: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Policy {
+  id: string;
+  organizationId: string;
+  projectId?: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  priority: number;
+  action: 'approved' | 'blocked' | 'needs_review';
+  rules: Array<{
+    field: string;
+    operator: 'gt' | 'lt' | 'gte' | 'lte' | 'eq';
+    value: number;
+  }>;
+  createdAt: string;
+}
+
+export interface AuditLog {
+  id: string;
+  userId: string;
+  userEmail: string;
+  action: string;
+  resource: string;
+  resourceId: string;
+  details?: string;
+  createdAt: string;
+}
+
+export interface TeamMember {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl?: string;
+  role: 'admin' | 'developer' | 'viewer' | 'security_engineer';
+  createdAt: string;
+}
+
+export interface ApprovalRequest {
+  id: string;
+  pipelineRunId: string;
+  projectId: string;
+  requestedBy: string;
+  reviewedBy?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reason?: string;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
+export interface DoraMetrics {
+  deploymentFrequency: { daily: number; weekly: number; label: string };
+  leadTime: { avgHours: number; label: string };
+  changeFailureRate: { percentage: number; label: string };
+  mttr: { avgMinutes: number; label: string };
+  trend: Array<{ date: string; deployments: number; failures: number; mttr: number }>;
+}
+
 // ─── Auth token helper ────────────────────────────────────────────────────────
 
 export async function getToken(): Promise<string | null> {
@@ -119,6 +265,21 @@ export const getPipelineStats = (organizationId: string) =>
 export const getPipelineById = (id: string) =>
   apiFetch<PipelineRun>(`/pipelines/${id}`);
 
+export const triggerPipeline = (data: {
+  projectId?: string;
+  organizationId?: string;
+  branch?: string;
+  author?: string;
+  message?: string;
+  diff?: string;
+}) =>
+  apiFetch<PipelineRun>('/pipelines/trigger', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+
+
 // ─── AI Review endpoints ──────────────────────────────────────────────────────
 
 export const getAIReviewStats = () =>
@@ -126,6 +287,101 @@ export const getAIReviewStats = () =>
 
 export const getAIReviews = (limit = 20) =>
   apiFetch<AIReviewResult[]>(`/ai-reviews?limit=${limit}`);
+
+export const getAIReviewByPipeline = (pipelineRunId: string) =>
+  apiFetch<AIReviewResult>(`/ai-reviews/pipeline/${pipelineRunId}`);
+
+// ─── Deployment endpoints ─────────────────────────────────────────────────────
+
+export const getDeployments = (limit = 20) =>
+  apiFetch<Deployment[]>(`/deployments?limit=${limit}`);
+
+export const getDeploymentById = (id: string) =>
+  apiFetch<Deployment>(`/deployments/${id}`);
+
+export const rollbackDeployment = (id: string, reason: string) =>
+  apiFetch<Deployment>(`/deployments/${id}/rollback`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+
+// ─── Monitoring / Incidents endpoints ────────────────────────────────────────
+
+export const getIncidents = (projectId?: string) => {
+  const params = projectId ? `?projectId=${projectId}` : '';
+  return apiFetch<Incident[]>(`/monitoring/incidents${params}`);
+};
+
+export const getIncidentRCA = (incidentId: string) =>
+  apiFetch<RootCauseAnalysis>(`/monitoring/incidents/${incidentId}/rca`);
+
+export const getAnomalies = (deploymentId?: string, limit = 20) => {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (deploymentId) params.set('deploymentId', deploymentId);
+  return apiFetch<AnomalyAlert[]>(`/monitoring/anomalies?${params}`);
+};
+
+// ─── Projects endpoints ───────────────────────────────────────────────────────
+
+export const getProjects = (organizationId: string) =>
+  apiFetch<Project[]>(`/projects?organizationId=${organizationId}`);
+
+export const getProjectById = (id: string) =>
+  apiFetch<Project>(`/projects/${id}`);
+
+export const createProject = (data: Partial<Project>) =>
+  apiFetch<Project>('/projects', { method: 'POST', body: JSON.stringify(data) });
+
+export const updateProject = (id: string, data: Partial<Project>) =>
+  apiFetch<Project>(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+// ─── Policies endpoints ───────────────────────────────────────────────────────
+
+export const getPolicies = (organizationId: string) =>
+  apiFetch<Policy[]>(`/policies?organizationId=${organizationId}`);
+
+export const createPolicy = (data: Partial<Policy>) =>
+  apiFetch<Policy>('/policies', { method: 'POST', body: JSON.stringify(data) });
+
+export const updatePolicy = (id: string, data: Partial<Policy>) =>
+  apiFetch<Policy>(`/policies/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const deletePolicy = (id: string) =>
+  apiFetch<void>(`/policies/${id}`, { method: 'DELETE' });
+
+// ─── Governance endpoints ─────────────────────────────────────────────────────
+
+export const getAuditLogs = (organizationId: string, limit = 50) =>
+  apiFetch<AuditLog[]>(`/governance/audit-logs?organizationId=${organizationId}&limit=${limit}`);
+
+export const getTeamMembers = (organizationId: string) =>
+  apiFetch<TeamMember[]>(`/governance/members?organizationId=${organizationId}`);
+
+export const updateMemberRole = (memberId: string, role: TeamMember['role']) =>
+  apiFetch<TeamMember>(`/governance/members/${memberId}/role`, {
+    method: 'PUT',
+    body: JSON.stringify({ role }),
+  });
+
+export const getApprovalRequests = (organizationId: string) =>
+  apiFetch<ApprovalRequest[]>(`/governance/approval-requests?organizationId=${organizationId}`);
+
+export const approveRequest = (id: string, reason?: string) =>
+  apiFetch<ApprovalRequest>(`/governance/approval-requests/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+
+export const rejectRequest = (id: string, reason: string) =>
+  apiFetch<ApprovalRequest>(`/governance/approval-requests/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+
+// ─── Analytics endpoints ──────────────────────────────────────────────────────
+
+export const getDoraMetrics = (organizationId: string, days = 30) =>
+  apiFetch<DoraMetrics>(`/analytics/dora?organizationId=${organizationId}&days=${days}`);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 

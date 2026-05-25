@@ -13,3 +13,8 @@ coverage
 .DS_Store
 Thumbs.db
 *.vsix
+
+# Playwright e2e
+apps/web/e2e-results/
+apps/web/playwright-report/
+apps/web/.playwright-cache/

@@ -15,6 +15,7 @@
       { "command": "aidevops.reviewFile", "title": "AI DevOps: Review Current File", "icon": "$(robot)" },
       { "command": "aidevops.reviewSelection", "title": "AI DevOps: Review Selection", "icon": "$(search)" },
       { "command": "aidevops.reviewPR", "title": "AI DevOps: Review PR Diff", "icon": "$(git-pull-request)" },
+      { "command": "aidevops.generateCommitMessage", "title": "AI DevOps: Generate Commit Message", "icon": "$(sparkle)" },
       { "command": "aidevops.openDashboard", "title": "AI DevOps: Open Dashboard", "icon": "$(dashboard)" },
       { "command": "aidevops.configure", "title": "AI DevOps: Configure Settings", "icon": "$(settings-gear)" }
     ],

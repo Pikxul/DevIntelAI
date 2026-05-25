@@ -1,11 +1,21 @@
 import NextAuth from 'next-auth';
 import Google from 'next-auth/providers/google';
+import CredentialsProvider from 'next-auth/providers/credentials';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'ochhExgjtTPvCk/Dqpb0zkAGtQgdOeNV+2XGhsFPo/4=',
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.GOOGLE_CLIENT_ID || 'dummy-client-id',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'dummy-client-secret',
+    }),
+    CredentialsProvider({
+      name: 'Credentials',
+      credentials: { email: { label: 'Email', type: 'text' }, password: { label: 'Password', type: 'password' } },
+      async authorize(credentials) {
+        // Dummy dev user
+        return { id: 'dev-user-id', name: 'Dev User', email: 'dev@acme.com', image: 'https://github.com/shadcn.png' };
+      }
     }),
   ],
 

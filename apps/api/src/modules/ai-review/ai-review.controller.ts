@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AIReviewService } from './ai-review.service';
@@ -26,5 +26,23 @@ export class AIReviewController {
   @ApiOperation({ summary: 'Get AI review for a specific pipeline run' })
   findByPipeline(@Param('pipelineRunId') pipelineRunId: string) {
     return this.service.findByPipelineRun(pipelineRunId);
+  }
+
+  @Post('inline')
+  @ApiOperation({ summary: 'Run inline AI review for VS Code' })
+  async reviewInline(@Body() dto: { code: string; filename: string }) {
+    return this.service.reviewInline(dto.code, dto.filename);
+  }
+
+  @Post('commit-message')
+  @ApiOperation({ summary: 'Generate commit message from diff' })
+  async generateCommitMessage(@Body() dto: { diff: string }) {
+    return this.service.generateCommitMessage(dto.diff);
+  }
+
+  @Post('pr-summary')
+  @ApiOperation({ summary: 'Generate PR summary from diff' })
+  async generatePRSummary(@Body() dto: { diff: string; title?: string }) {
+    return this.service.summarizePR(dto.diff, dto.title);
   }
 }

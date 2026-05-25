@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Deployment } from '../../entities';
@@ -12,6 +12,7 @@ export class DeploymentsService {
 
   constructor(
     @InjectRepository(Deployment) private repo: Repository<Deployment>,
+    @Inject(forwardRef(() => PipelinesService))
     private readonly pipelinesService: PipelinesService,
   ) {}
 

@@ -298,3 +298,68 @@ export interface AnomalyDetectedEvent {
   anomaly: AnomalyAlert;
   deployment: Deployment;
 }
+
+// ─── Policy Engine Types ──────────────────────────────────────────────────────
+
+export interface PolicyRule {
+  id: string;
+  field: 'overall_risk' | 'security_risk' | 'quality_risk' | 'critical_issues' | 'high_issues';
+  operator: 'gt' | 'lt' | 'eq' | 'gte' | 'lte';
+  value: number;
+}
+
+export type PolicyDecision = 'approved' | 'blocked' | 'needs_review';
+
+export interface PipelinePolicy {
+  id: string;
+  organizationId: string;
+  projectId?: string; // Optional: applies to all projects if undefined
+  name: string;
+  description: string;
+  rules: PolicyRule[];
+  action: PolicyDecision; // What to do if rules match
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Incident Intelligence & Observability Types ───────────────────────────────
+
+export interface IncidentAlert {
+  id: string;
+  projectId: string;
+  deploymentId?: string;
+  environment: string;
+  source: 'datadog' | 'prometheus' | 'aws_cloudwatch' | 'custom';
+  severity: SeverityLevel;
+  title: string;
+  description: string;
+  metric?: string;
+  value?: number;
+  threshold?: number;
+  timestamp: string;
+}
+
+export interface RootCauseAnalysis {
+  id: string;
+  incidentId: string;
+  summary: string;
+  hypothesis: string;
+  rootCause: string;
+  affectedComponents: string[];
+  recommendedActions: string[];
+  confidenceScore: number; // 0-100
+  generatedAt: string;
+}
+
+export interface RollbackEvent {
+  id: string;
+  incidentId: string;
+  deploymentId: string;
+  previousDeploymentId: string;
+  status: StageStatus;
+  reason: string;
+  triggeredBy: 'auto' | 'manual';
+  triggeredAt: string;
+  completedAt?: string;
+}

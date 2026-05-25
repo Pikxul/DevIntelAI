@@ -103,3 +103,75 @@ export class AnomalyAlert {
   @Column({ default: false }) autoRollbackTriggered: boolean;
   @CreateDateColumn() detectedAt: Date;
 }
+
+@Entity('incident_alerts')
+export class IncidentAlertEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column() projectId: string;
+  @Column({ nullable: true }) deploymentId: string;
+  @Column() environment: string;
+  @Column() source: string;
+  @Column() severity: string;
+  @Column() title: string;
+  @Column({ type: 'text' }) description: string;
+  @Column({ nullable: true }) metric: string;
+  @Column({ type: 'decimal', nullable: true }) value: number;
+  @Column({ type: 'decimal', nullable: true }) threshold: number;
+  @CreateDateColumn() timestamp: Date;
+}
+
+@Entity('root_cause_analyses')
+export class RootCauseAnalysisEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column() incidentId: string;
+  @Column({ type: 'text' }) summary: string;
+  @Column({ type: 'text' }) hypothesis: string;
+  @Column({ type: 'text' }) rootCause: string;
+  @Column({ type: 'jsonb', default: '[]' }) affectedComponents: string[];
+  @Column({ type: 'jsonb', default: '[]' }) recommendedActions: string[];
+  @Column({ type: 'decimal', precision: 5, scale: 2 }) confidenceScore: number;
+  @CreateDateColumn() generatedAt: Date;
+}
+
+@Entity('rollback_events')
+export class RollbackEventEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column() incidentId: string;
+  @Column() deploymentId: string;
+  @Column() previousDeploymentId: string;
+  @Column() status: string;
+  @Column({ type: 'text' }) reason: string;
+  @Column() triggeredBy: string;
+  @CreateDateColumn() triggeredAt: Date;
+  @Column({ nullable: true }) completedAt: Date;
+}
+
+@Entity('approval_requests')
+export class ApprovalRequestEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column({ type: 'uuid' }) pipelineRunId: string;
+  @Column() projectId: string;
+  @Column() organizationId: string;
+  @Column() requestedBy: string;
+  @Column({ nullable: true }) reviewedBy: string;
+  @Column({ default: 'pending' }) status: string; // 'pending' | 'approved' | 'rejected'
+  @Column({ type: 'text', nullable: true }) reason: string;
+  @CreateDateColumn() createdAt: Date;
+  @Column({ nullable: true }) reviewedAt: Date;
+}
+
+@Entity('audit_logs')
+export class AuditLogEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column() organizationId: string;
+  @Column() userId: string;
+  @Column() userEmail: string;
+  @Column() action: string;
+  @Column() resource: string;
+  @Column() resourceId: string;
+  @Column({ type: 'text', nullable: true }) details: string;
+  @CreateDateColumn() createdAt: Date;
+}
+
+export * from './PipelinePolicy';
+

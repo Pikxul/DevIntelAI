@@ -11,9 +11,33 @@ export class PipelinesController {
   constructor(private readonly service: PipelinesService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Trigger a new pipeline run' })
+  @ApiOperation({ summary: 'Trigger a new pipeline run (also triggered by webhooks)' })
   create(@Body() dto: CreatePipelineRunDto) {
     return this.service.create(dto);
+  }
+
+  @Post('trigger')
+  @ApiOperation({ summary: 'Manually trigger a demo pipeline run for testing' })
+  triggerDemo(
+    @Body() body: {
+      projectId?: string;
+      organizationId?: string;
+      branch?: string;
+      author?: string;
+      message?: string;
+      diff?: string;
+    },
+  ) {
+    return this.service.create({
+      projectId: body.projectId ?? 'demo-project',
+      organizationId: body.organizationId ?? 'default-org',
+      commitSha: Math.random().toString(16).slice(2, 9),
+      branch: body.branch ?? 'main',
+      author: body.author ?? 'dev@example.com',
+      message: body.message ?? 'feat: manual test trigger',
+      triggeredBy: 'manual',
+      diff: body.diff,
+    });
   }
 
   @Get()

@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
 import axios from 'axios';
+import * as cp from 'child_process';
+import * as util from 'util';
+
+const exec = util.promisify(cp.exec);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +65,8 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('aidevops.reviewFile', reviewCurrentFile),
     vscode.commands.registerCommand('aidevops.reviewSelection', reviewSelection),
+    vscode.commands.registerCommand('aidevops.reviewPR', reviewPR),
+    vscode.commands.registerCommand('aidevops.generateCommitMessage', generateCommitMessage),
     vscode.commands.registerCommand('aidevops.openDashboard', openDashboard),
     vscode.commands.registerCommand('aidevops.configure', openSettings),
     diagnosticCollection,
@@ -115,6 +121,83 @@ function openDashboard() {
 
 function openSettings() {
   vscode.commands.executeCommand('workbench.action.openSettings', 'aidevops');
+}
+
+async function getGitDiff(): Promise<string> {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders) return '';
+  const cwd = workspaceFolders[0].uri.fsPath;
+  let { stdout } = await exec('git diff --cached', { cwd }).catch(() => ({ stdout: '' }));
+  if (!stdout) {
+    const result = await exec('git diff', { cwd }).catch(() => ({ stdout: '' }));
+    stdout = result.stdout;
+  }
+  return stdout;
+}
+
+async function generateCommitMessage() {
+  const config = getConfig();
+  statusBarItem.text = '$(loading~spin) Generating Commit...';
+  
+  try {
+    const diff = await getGitDiff();
+    if (!diff) {
+      vscode.window.showInformationMessage('AI DevOps: No git changes detected.');
+      return;
+    }
+
+    const response = await axios.post<{ message: string }>(
+      `${config.apiUrl}/api/v1/ai-review/commit-message`,
+      { diff },
+      { headers: { Authorization: `Bearer ${config.apiToken}` } }
+    );
+
+    const commitMessage = response.data.message;
+
+    const gitExtension = vscode.extensions.getExtension('vscode.git');
+    if (gitExtension) {
+      const git = gitExtension.isActive ? gitExtension.exports : await gitExtension.activate();
+      const api = git.getAPI(1);
+      if (api.repositories.length > 0) {
+        api.repositories[0].inputBox.value = commitMessage;
+        vscode.window.showInformationMessage('AI DevOps: Commit message generated!');
+      } else {
+         vscode.window.showInformationMessage(`AI DevOps Generated Commit:\\n\\n${commitMessage}`);
+      }
+    }
+  } catch (err) {
+    handleReviewError(err);
+  } finally {
+    statusBarItem.text = '$(robot) AI Review';
+  }
+}
+
+async function reviewPR() {
+  const config = getConfig();
+  statusBarItem.text = '$(loading~spin) Summarizing PR...';
+  
+  try {
+    const diff = await getGitDiff();
+    if (!diff) {
+      vscode.window.showInformationMessage('AI DevOps: No git changes detected to summarize.');
+      return;
+    }
+
+    const response = await axios.post<{ summary: string }>(
+      `${config.apiUrl}/api/v1/ai-review/pr-summary`,
+      { diff },
+      { headers: { Authorization: `Bearer ${config.apiToken}` } }
+    );
+
+    outputChannel.appendLine('\\n--- AI PR Summary ---\\n');
+    outputChannel.appendLine(response.data.summary);
+    outputChannel.show();
+    vscode.window.showInformationMessage('AI DevOps: PR Summary generated in output channel.');
+  } catch (err) {
+    handleReviewError(err);
+  } finally {
+    statusBarItem.text = '$(robot) AI Review';
+  }
 }
 
 // ─── Core Review Logic ────────────────────────────────────────────────────────
