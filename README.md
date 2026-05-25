@@ -1,8 +1,8 @@
-# ⚡ AI DevOps Platform
+# ⚡ DevIntelAI Platform
 
 > **AI-powered DevOps orchestration** — automated code review, risk analysis, deployment, and anomaly detection in one unified platform.
 
-[![CI](https://github.com/your-org/aidevops/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/aidevops/actions)
+[![CI](https://github.com/your-org/devintelai/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/devintelai/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](./LICENSE)
 [![pnpm](https://img.shields.io/badge/pnpm-9.x-orange)](https://pnpm.io)
 [![Node](https://img.shields.io/badge/node-20.x-green)](https://nodejs.org)
@@ -51,7 +51,7 @@ Slack / Teams / Jira Notifications
 ## 📦 Monorepo Structure
 
 ```
-aiDevOps/
+devintelai/
 ├── apps/
 │   ├── web/                  # Next.js 14 SaaS dashboard
 │   ├── api/                  # NestJS backend API
@@ -85,8 +85,8 @@ aiDevOps/
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/your-org/aidevops.git
-cd aidevops
+git clone https://github.com/your-org/devintelai.git
+cd devintelai
 cp .env.example .env          # Fill in your API keys
 powershell -ExecutionPolicy Bypass -Command "pnpm install"
 ```
@@ -196,9 +196,9 @@ powershell -ExecutionPolicy Bypass -Command "pnpm compile"
 
 | Command | Description |
 |---------|-------------|
-| `AI DevOps: Review Current File` | AI review of open file |
-| `AI DevOps: Review Selection` | AI review of selected code |
-| `AI DevOps: Open Dashboard` | Open web dashboard |
+| `DevIntelAI: Review Current File` | AI review of open file |
+| `DevIntelAI: Review Selection` | AI review of selected code |
+| `DevIntelAI: Open Dashboard` | Open web dashboard |
 
 ### Settings
 
@@ -232,8 +232,8 @@ push / PR
 
 | Secret | Description |
 |--------|-------------|
-| `AIDEVOPS_API_URL` | Your deployed API URL |
-| `AIDEVOPS_API_TOKEN` | API JWT token |
+| `DEVINTELAI_API_URL` | Your deployed API URL |
+| `DEVINTELAI_API_TOKEN` | API JWT token |
 | `DOCKER_USERNAME` | Docker Hub username |
 | `DOCKER_PASSWORD` | Docker Hub password / token |
 | `SLACK_WEBHOOK_URL` | Slack incoming webhook |
@@ -281,4 +281,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 ## 📄 License
 
-MIT © AI DevOps Platform
+MIT © DevIntelAI Platform
