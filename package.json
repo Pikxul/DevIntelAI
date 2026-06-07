@@ -8,8 +8,10 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "test": "turbo test",
+    "webhook:simulate": "node scripts/simulate-webhook.js",
     "clean": "turbo clean && rimraf node_modules",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "mcp:playwright": "npx @playwright/mcp@latest --port 8931 --browser chrome --save-session --output-dir ./apps/web/e2e-results/mcp-sessions"
   },
   "devDependencies": {
     "turbo": "^2.0.0",

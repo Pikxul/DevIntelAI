@@ -1,7 +1,9 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { SecretsModule } from './modules/secrets/secrets.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { PipelinesModule } from './modules/pipelines/pipelines.module';
 import { AIReviewModule } from './modules/ai-review/ai-review.module';
@@ -15,6 +17,12 @@ import { GatewayModule } from './modules/gateway/gateway.module';
 import { PolicyEngineModule } from './modules/policy-engine/policy-engine.module';
 import { GovernanceModule } from './modules/governance/governance.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { HealthModule } from './modules/health/health.module';
+import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { RateLimitGuard } from './modules/auth/rate-limit.guard';
+import { TenantGuard } from './modules/auth/tenant.guard';
+import { IdempotencyInterceptor } from './modules/auth/idempotency.interceptor';
+import { LoggingMiddleware } from './modules/auth/logging.middleware';
 
 @Module({
   imports: [
@@ -29,7 +37,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
         type: 'postgres',
         url: cfg.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
-        synchronize: cfg.get('NODE_ENV') !== 'production',
+        synchronize: cfg.get<string>('TYPEORM_SYNC') === 'true',
         logging: cfg.get('NODE_ENV') === 'development',
       }),
     }),
@@ -44,6 +52,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     }),
 
     // Feature Modules
+    SecretsModule,
     AuthModule,
     PipelinesModule,
     AIReviewModule,
@@ -57,6 +66,28 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     PolicyEngineModule,
     GovernanceModule,
     AnalyticsModule,
+    HealthModule,
+    OrganizationsModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: RateLimitGuard,
+    },
+    {
+      // TenantGuard runs globally after JWT auth to prevent cross-tenant access.
+      // Routes that don't use JWT (public webhooks etc.) must use @SkipTenantCheck().
+      provide: APP_GUARD,
+      useClass: TenantGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: IdempotencyInterceptor,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggingMiddleware).forRoutes('*');
+  }
+}

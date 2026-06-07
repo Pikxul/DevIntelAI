@@ -18,3 +18,13 @@ Thumbs.db
 apps/web/e2e-results/
 apps/web/playwright-report/
 apps/web/.playwright-cache/
+
+# Local databases & logs
+db_data/
+*.log
+*.tsbuildinfo
+
+# Screenshots & temp artifacts
+screenshot_connected_repos.png
+.mcp.json
+

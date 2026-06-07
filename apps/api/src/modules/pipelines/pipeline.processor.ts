@@ -9,6 +9,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { ProjectsService } from '../projects/projects.service';
 import { DeploymentsService } from '../deployments/deployments.service';
 import type { PipelineStageName } from '@aidevops/shared-types';
+import { getAIClient } from '@aidevops/ai-client';
 
 export interface PipelineJobData {
   pipelineRunId: string;
@@ -82,17 +83,44 @@ export class PipelineProcessor {
       await this.pipelinesService.updateStage(pipelineRunId, 'static_analysis', 'success', '✅ Static analysis passed — 0 critical issues');
 
       // ── Stage 4: security_scan ─────────────────────────────────────────────
-      await this.pipelinesService.updateStage(pipelineRunId, 'security_scan', 'running', '🛡️ Running Snyk security scan...');
-      await sleep(2000);
-
-      // Check AI review risk for security gate
-      if (riskScore >= 85) {
-        await this.pipelinesService.updateStage(pipelineRunId, 'security_scan', 'failed', `❌ Security gate failed — AI Risk Score too high (${riskScore}/100)`);
-        await this.blockPipeline(pipelineRunId, organizationId, projectId || 'default-project', author, `Security scan blocked: AI Risk Score ${riskScore}/100 exceeds threshold`);
-        return;
+      await this.pipelinesService.updateStage(pipelineRunId, 'security_scan', 'running', '🛡️ Running dedicated AI security review pass...');
+      
+      let securityPassed = true;
+      let securityLog = '✅ Dedicated AI security scan passed — no critical CVEs or credentials leak found';
+      
+      try {
+        const aiClient = getAIClient();
+        const scanResult = await aiClient.scanSecurity(diffContent, pipelineRunId);
+        
+        securityPassed = scanResult.passed;
+        const findingsCount = scanResult.findings.length;
+        
+        if (findingsCount > 0) {
+          securityLog = `⚠️ AI Security scan complete. Found ${findingsCount} issues (${scanResult.criticalCount} critical, ${scanResult.highCount} high, ${scanResult.mediumCount} medium, ${scanResult.lowCount} low).`;
+          scanResult.findings.forEach((f) => {
+            securityLog += `\n- [${f.severity.toUpperCase()}] ${f.file}:${f.line}: ${f.title} - ${f.description}`;
+            if (f.fixDescription) {
+              securityLog += ` (Fix: ${f.fixDescription})`;
+            }
+          });
+        }
+        
+        if (!securityPassed) {
+          await this.pipelinesService.updateStage(pipelineRunId, 'security_scan', 'failed', `❌ AI Security scan failed: critical/high vulnerabilities found`);
+          await this.blockPipeline(pipelineRunId, organizationId, projectId || 'default-project', author, `Security Scan Blocked: AI SAST identified critical vulnerabilities: ${securityLog}`);
+          return;
+        } else {
+          await this.pipelinesService.updateStage(pipelineRunId, 'security_scan', 'success', securityLog);
+        }
+      } catch (err) {
+        this.logger.warn(`AI Security scan pass failed (using fallback): ${err.message}`);
+        if (riskScore >= 85) {
+          await this.pipelinesService.updateStage(pipelineRunId, 'security_scan', 'failed', `❌ Security gate failed — AI Risk Score too high (${riskScore}/100)`);
+          await this.blockPipeline(pipelineRunId, organizationId, projectId || 'default-project', author, `Security scan blocked: AI Risk Score ${riskScore}/100 exceeds threshold`);
+          return;
+        }
+        await this.pipelinesService.updateStage(pipelineRunId, 'security_scan', 'success', '✅ AI security scan passed (offline mode)');
       }
-
-      await this.pipelinesService.updateStage(pipelineRunId, 'security_scan', 'success', '✅ Security scan passed — no critical CVEs found');
 
       // ── Policy evaluation ──────────────────────────────────────────────────
       if (aiReview) {

@@ -73,12 +73,14 @@ export interface RiskScore {
   maintainability: number;
   level: RiskLevel;
   summary: string;
+  confidence?: number;
+  evidence?: string[];
 }
 
 export interface AIReviewResult {
   id: string;
   pipelineRunId: string;
-  provider: 'openai' | 'anthropic';
+  provider: 'openai' | 'anthropic' | 'gemini';
   model: string;
   riskScore: RiskScore;
   issues: CodeIssue[];

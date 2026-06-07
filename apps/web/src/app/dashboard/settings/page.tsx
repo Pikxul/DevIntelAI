@@ -1,7 +1,7 @@
 'use client';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
-import { Settings, Bot, Link2, Sliders } from 'lucide-react';
+import { Settings, Bot, Link2, Sliders, Bell, CheckCircle, XCircle } from 'lucide-react';
 
 interface SettingRow {
   key: string;
@@ -61,6 +61,59 @@ export default function SettingsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
           {settings.slice(4, 6).map((s, i) => (
             <SettingItem key={s.key} setting={s} index={i} onUpdate={update} />
+          ))}
+        </div>
+      </div>
+
+      {/* Notification Channels */}
+      <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <h3 style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Bell size={18} className="text-cyan-400" /> Notification Channels
+        </h3>
+        <p className="text-sm text-muted" style={{ marginBottom: '1.5rem' }}>
+          Active alert destinations. Configure via environment variables in <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8em' }}>.env</code>.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
+          {[
+            { name: 'Slack', envKey: 'SLACK_BOT_TOKEN or SLACK_WEBHOOK_URL', icon: '💬', color: '#4a154b', border: 'rgba(74,21,75,0.4)' },
+            { name: 'MS Teams', envKey: 'TEAMS_WEBHOOK_URL', icon: '🟦', color: '#6264a7', border: 'rgba(98,100,167,0.4)' },
+            { name: 'Jira', envKey: 'JIRA_BASE_URL', icon: '🎯', color: '#0052cc', border: 'rgba(0,82,204,0.35)' },
+            { name: 'Email (SMTP)', envKey: 'SMTP_HOST', icon: '📧', color: '#059669', border: 'rgba(5,150,105,0.35)' },
+          ].map((ch, i) => (
+            <motion.div
+              key={ch.name}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.06 }}
+              style={{
+                padding: '1rem',
+                background: 'rgba(255,255,255,0.02)',
+                border: `1px solid ${ch.border}`,
+                borderRadius: 'var(--radius-md)',
+                display: 'flex', flexDirection: 'column', gap: '0.5rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '1.25rem' }}>{ch.icon}</span>
+                {/* Status: configured indicators are server-side; we show "Set in .env" pattern */}
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    padding: '2px 7px',
+                    borderRadius: 20,
+                    background: 'rgba(255,255,255,0.06)',
+                    color: 'var(--text-muted)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  via .env
+                </span>
+              </div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{ch.name}</div>
+              <div style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                {ch.envKey}
+              </div>
+            </motion.div>
           ))}
         </div>
       </div>

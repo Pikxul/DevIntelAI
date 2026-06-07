@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/lib/socket';
 import { PipelineStats, AIReviewStats } from '@/lib/api';
+import { mutate } from 'swr';
 
 export function useRealtimeDashboard(
   initialPipelineStats: PipelineStats | undefined,
@@ -32,9 +33,7 @@ export function useRealtimeDashboard(
       });
 
       socket.on('pipeline:update', () => {
-        // We could trigger an SWR revalidation here, but for now
-        // the 10s polling interval on useRecentPipelines will catch it,
-        // or we can expect the gateway to push dashboard:stats.
+        mutate('recent-pipelines');
       });
     };
 

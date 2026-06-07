@@ -2,16 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { getAIClient } from '@aidevops/ai-client';
-import { AIReviewResult } from '../../entities';
+import { AIReviewResult, CommitEntity, IncidentAlertEntity } from '../../entities';
 import { PolicyEngineService } from '../policy-engine/policy-engine.service';
 import type { AIReviewResult as IAIReviewResult } from '@aidevops/shared-types';
+import Redis from 'ioredis';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AIReviewService {
   private readonly logger = new Logger(AIReviewService.name);
+  private readonly redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
   constructor(
     @InjectRepository(AIReviewResult) private repo: Repository<AIReviewResult>,
+    @InjectRepository(CommitEntity) private commitRepo: Repository<CommitEntity>,
+    @InjectRepository(IncidentAlertEntity) private incidentRepo: Repository<IncidentAlertEntity>,
     private readonly policyEngineService: PolicyEngineService,
   ) {}
 
@@ -24,8 +29,92 @@ export class AIReviewService {
   ): Promise<AIReviewResult> {
     this.logger.log(`Starting AI review for pipeline ${pipelineRunId}`);
 
-    const aiClient = getAIClient({ riskThreshold: 100 }); // We handle threshold in Policy Engine now
-    const result = await aiClient.reviewCode(diff, pipelineRunId, context);
+    const diffHash = crypto.createHash('sha256').update(diff).digest('hex');
+    const cacheKey = `ai-cache:review:${diffHash}`;
+
+    try {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) {
+        this.logger.log(`[Cache Hit] Redis match found for diff hash: ${diffHash}`);
+        const result = JSON.parse(cached);
+
+        const policy = await this.policyEngineService.evaluate(result as unknown as IAIReviewResult, organizationId, projectId);
+        const approved = policy.decision === 'approved';
+        const blockedReason = policy.decision !== 'approved' ? policy.reason : undefined;
+
+        const entity = this.repo.create({
+          pipelineRunId,
+          provider: result.provider,
+          model: result.model,
+          riskScore: result.riskScore as unknown as object,
+          issues: result.issues as unknown as object[],
+          summary: result.summary,
+          recommendations: result.recommendations as unknown as object[],
+          approved,
+          blockedReason,
+          tokensUsed: 0,
+          costUsd: 0,
+        });
+
+        const saved = await this.repo.save(entity);
+        return saved;
+      }
+    } catch (err) {
+      this.logger.warn(`Redis cache lookup failed: ${err.message}`);
+    }
+
+    // Build historical context
+    let enrichedContext = '';
+    if (projectId) {
+      try {
+        const recentCommits = await this.commitRepo.find({
+          where: { projectId },
+          order: { createdAt: 'DESC' },
+          take: 5,
+        });
+
+        const recentIncidents = await this.incidentRepo.find({
+          where: { projectId },
+          order: { timestamp: 'DESC' },
+          take: 3,
+        });
+
+        if (recentCommits.length > 0 || recentIncidents.length > 0) {
+          enrichedContext += '\n### Repository Historical Context:\n';
+          
+          if (recentCommits.length > 0) {
+            enrichedContext += '\nRecent Commits:\n';
+            recentCommits.forEach((c) => {
+              enrichedContext += `- Commit: ${c.sha.slice(0, 7)} | Risk Score: ${c.riskScore ?? 'N/A'} | Message: "${c.message}" | Author: ${c.author}\n`;
+            });
+          }
+
+          if (recentIncidents.length > 0) {
+            enrichedContext += '\nRecent System Incidents & Production Failures:\n';
+            recentIncidents.forEach((inc) => {
+              enrichedContext += `- Incident: "${inc.title}" | Severity: ${inc.severity} | Description: "${inc.description}"\n`;
+            });
+          }
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to build historical context: ${err.message}`);
+      }
+    }
+
+    const finalDiff = enrichedContext 
+      ? `${enrichedContext}\n\n### Code Diff under Analysis:\n${diff}`
+      : diff;
+
+    const aiClient = getAIClient({ riskThreshold: 100 });
+    const result = await aiClient.reviewCode(finalDiff, pipelineRunId, context);
+
+    // Save cache to Redis
+    try {
+      await this.redis.set(cacheKey, JSON.stringify(result), 'EX', 604800); // 7 days expiration
+      this.logger.log(`[Cache Write] Saved review result in Redis for hash: ${diffHash}`);
+    } catch (err) {
+      this.logger.warn(`Failed to write to Redis cache: ${err.message}`);
+    }
 
     // Evaluate against dynamic policies
     const policy = await this.policyEngineService.evaluate(result as unknown as IAIReviewResult, organizationId, projectId);

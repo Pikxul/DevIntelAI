@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getPipelines, getPipelineStats, triggerPipeline, PipelineRun, PipelineStats } from '@/lib/api';
+import { getPipelines, getPipelineStats, triggerPipeline, getProjects, PipelineRun, PipelineStats, Project } from '@/lib/api';
 import { GitBranch, RefreshCw, Play, Sparkles, CheckCircle2, XCircle, Clock, BarChart3, ArrowUpCircle, GitPullRequest, AlertTriangle } from 'lucide-react';
 
 const DEFAULT_ORG = 'default-org';
@@ -43,6 +43,7 @@ export default function PipelinesPage() {
   const router = useRouter();
   const [pipelines, setPipelines] = useState<PipelineRun[]>([]);
   const [stats, setStats] = useState<PipelineStats | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | PipelineRun['status']>('all');
@@ -51,12 +52,16 @@ export default function PipelinesPage() {
   const [triggerForm, setTriggerForm] = useState({
     branch: 'main',
     message: 'feat: manual pipeline trigger',
-    projectId: 'demo-project',
+    projectId: '',
     organizationId: 'default-org',
   });
 
   const handleTrigger = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!triggerForm.projectId) {
+      alert('Please select or provide a valid project.');
+      return;
+    }
     setTriggering(true);
     try {
       const run = await triggerPipeline(triggerForm);
@@ -71,12 +76,20 @@ export default function PipelinesPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [runs, pStats] = await Promise.all([
+      const [runs, pStats, projs] = await Promise.all([
         getPipelines(DEFAULT_ORG),
         getPipelineStats(DEFAULT_ORG),
+        getProjects(DEFAULT_ORG),
       ]);
       setPipelines(runs);
       setStats(pStats);
+      setProjects(projs);
+      if (projs.length > 0) {
+        setTriggerForm(prev => ({
+          ...prev,
+          projectId: projs[0].id,
+        }));
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -133,7 +146,7 @@ export default function PipelinesPage() {
             style={{
               background: 'var(--bg-surface)', border: '1px solid var(--border)',
               borderRadius: 'var(--radius-lg)', padding: '2rem',
-              width: '100%', maxWidth: 480,
+              width: '100%', maxWidth: 480, margin: 'auto',
             }}
           >
             <div className="flex items-center justify-between" style={{ marginBottom: '1.5rem' }}>
@@ -143,9 +156,31 @@ export default function PipelinesPage() {
               <button onClick={() => setShowTrigger(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.25rem' }}>✕</button>
             </div>
             <form onSubmit={handleTrigger} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, marginBottom: 6, color: 'var(--text-secondary)' }}>Project</label>
+                {projects.length > 0 ? (
+                  <select
+                    value={triggerForm.projectId}
+                    onChange={e => setTriggerForm(prev => ({ ...prev, projectId: e.target.value }))}
+                    style={{
+                      width: '100%', background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                      color: 'var(--text-primary)', padding: '0.6rem 0.875rem', fontSize: '0.875rem',
+                    }}
+                  >
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.repoProvider})</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{ fontSize: '0.875rem', color: 'var(--accent-red)' }}>
+                    No connected projects found in this organization. Please connect a project first.
+                  </div>
+                )}
+              </div>
+
               {[
                 { label: 'Branch', key: 'branch', placeholder: 'main' },
-                { label: 'Project ID', key: 'projectId', placeholder: 'demo-project' },
                 { label: 'Commit Message', key: 'message', placeholder: 'feat: new feature' },
               ].map(f => (
                 <div key={f.key}>
@@ -167,7 +202,7 @@ export default function PipelinesPage() {
                 <Sparkles size={14} className="text-purple-400" style={{ flexShrink: 0 }} />
                 <span>This will trigger a live pipeline run through the AI Review, Policy Engine, and all CI/CD stages. You'll be redirected to watch it progress in real-time.</span>
               </p>
-              <button type="submit" className="btn btn-primary" disabled={triggering} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+              <button type="submit" className="btn btn-primary" disabled={triggering || projects.length === 0} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                 {triggering ? (
                   <><Clock size={16} className="animate-spin" /> Triggering...</>
                 ) : (

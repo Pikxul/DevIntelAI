@@ -1,0 +1,19 @@
+DEVINTEL AI - APPLICATION FLOW
+
+User Onboarding:
+Sign Up -> Create Organization -> Connect GitHub -> Install GitHub App -> Select Repositories -> Sync -> Dashboard
+
+GitHub Flow:
+GitHub Event -> Webhook -> Queue -> Worker -> Database
+
+AI Flow:
+Repository Event -> Context Builder -> Prompt Builder -> AI Analysis -> Risk Score -> Dashboard
+
+Governance Flow:
+Risk Score -> Policy Engine -> Approve / Review / Block
+
+Incident Flow:
+Incident -> Correlation -> AI Summary -> Notification -> Resolution
+
+Notification Flow:
+Platform Event -> Slack / Email / Jira

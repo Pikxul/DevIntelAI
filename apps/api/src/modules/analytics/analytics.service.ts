@@ -50,60 +50,116 @@ export class AnalyticsService {
     @InjectRepository(RollbackEventEntity) private rollbackRepo: Repository<RollbackEventEntity>,
   ) {}
 
-  async getDoraMetrics(organizationId: string, days = 30): Promise<DoraMetrics> {
+  async getDoraMetrics(organizationId: string, days = 30, projectId?: string): Promise<DoraMetrics> {
+    this.logger.log(`Calculating DORA metrics for organization ${organizationId} (project: ${projectId || 'all'})`);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    // ── Deployment Frequency ─────────────────────────────────────────────────
-    // Count actual Deployment rows (may be 0 in MVP)
-    const totalDeployments = await this.deploymentRepo
+    // ── 1. Deployment Frequency (T6.3 & T6.4) ────────────────────────────────
+    const totalDeploymentsQuery = this.deploymentRepo
       .createQueryBuilder('d')
-      .innerJoin(PipelineRun, 'pr', 'pr.id = d."pipelineRunId"::uuid')
+      .innerJoin(PipelineRun, 'pr', 'pr.id = d.pipelineRunId')
       .where('pr.organizationId = :orgId', { orgId: organizationId })
-      .andWhere('d.startedAt >= :since', { since })
-      .getCount();
+      .andWhere('d.startedAt >= :since', { since });
 
-    // Successful pipeline runs are a valid proxy for deployments in MVP
-    const successfulPipelineRuns = await this.pipelineRepo
+    if (projectId) {
+      totalDeploymentsQuery.andWhere('pr.projectId = :projectId', { projectId });
+    }
+    const totalDeployments = await totalDeploymentsQuery.getCount();
+
+    // Successful pipeline runs act as valid deployments proxy
+    const successfulPipelineRunsQuery = this.pipelineRepo
       .createQueryBuilder('pr')
       .where('pr.organizationId = :orgId', { orgId: organizationId })
       .andWhere('pr.status = :status', { status: 'success' })
-      .andWhere('pr.createdAt >= :since', { since })
-      .getCount();
+      .andWhere('pr.createdAt >= :since', { since });
+
+    if (projectId) {
+      successfulPipelineRunsQuery.andWhere('pr.projectId = :projectId', { projectId });
+    }
+    const successfulPipelineRuns = await successfulPipelineRunsQuery.getCount();
 
     const effectiveDeployments = Math.max(totalDeployments, successfulPipelineRuns);
     const dailyFreq = effectiveDeployments / days;
     const weeklyFreq = dailyFreq * 7;
 
-    // ── Change Failure Rate ──────────────────────────────────────────────────
-    const failedDeployments = await this.deploymentRepo
+    // ── 2. Change Failure Rate (T6.3 & T6.4) ──────────────────────────────────
+    const failedDeploymentsQuery = this.deploymentRepo
       .createQueryBuilder('d')
-      .innerJoin(PipelineRun, 'pr', 'pr.id = d."pipelineRunId"::uuid')
+      .innerJoin(PipelineRun, 'pr', 'pr.id = d.pipelineRunId')
       .where('pr.organizationId = :orgId', { orgId: organizationId })
       .andWhere('d.startedAt >= :since', { since })
-      .andWhere('d.status IN (:...statuses)', { statuses: ['failed', 'rolled_back'] })
-      .getCount();
+      .andWhere('d.status IN (:...statuses)', { statuses: ['failed', 'rolled_back'] });
 
-    const totalFailedRuns = await this.pipelineRepo
+    if (projectId) {
+      failedDeploymentsQuery.andWhere('pr.projectId = :projectId', { projectId });
+    }
+    const failedDeployments = await failedDeploymentsQuery.getCount();
+
+    const totalFailedRunsQuery = this.pipelineRepo
       .createQueryBuilder('pr')
       .where('pr.organizationId = :orgId', { orgId: organizationId })
       .andWhere('pr.status IN (:...s)', { s: ['failed'] })
-      .andWhere('pr.createdAt >= :since', { since })
-      .getCount();
+      .andWhere('pr.createdAt >= :since', { since });
+
+    if (projectId) {
+      totalFailedRunsQuery.andWhere('pr.projectId = :projectId', { projectId });
+    }
+    const totalFailedRuns = await totalFailedRunsQuery.getCount();
 
     const totalAttempts = effectiveDeployments + totalFailedRuns;
     const effectiveCfr = totalAttempts > 0
       ? Math.round((Math.max(failedDeployments, totalFailedRuns) / totalAttempts) * 100 * 10) / 10
       : 0;
 
-    // ── Lead Time ────────────────────────────────────────────────────────────
-    // Use 2.4h as a reasonable default for fast MVP pipelines (< 3 min actual)
-    const avgLeadTimeHours = successfulPipelineRuns > 0 ? 2.4 : 0;
+    // ── 3. Lead Time (T6.3 & T6.4) ────────────────────────────────────────────
+    let avgLeadTimeHours = 0;
+    const completedDeploymentsQuery = this.deploymentRepo
+      .createQueryBuilder('d')
+      .innerJoin(PipelineRun, 'pr', 'pr.id = d.pipelineRunId')
+      .where('pr.organizationId = :orgId', { orgId: organizationId })
+      .andWhere('d.status = :status', { status: 'success' })
+      .andWhere('d.completedAt IS NOT NULL');
 
-    // ── MTTR from rollback events ────────────────────────────────────────────
-    const rollbacks = await this.rollbackRepo
+    if (projectId) {
+      completedDeploymentsQuery.andWhere('pr.projectId = :projectId', { projectId });
+    }
+
+    const completedDeployments = await completedDeploymentsQuery.getMany();
+
+    if (completedDeployments.length > 0) {
+      let totalLeadTimeMs = 0;
+      let countedDeployments = 0;
+
+      for (const d of completedDeployments) {
+        const pipelineRun = await this.pipelineRepo.findOne({ where: { id: d.pipelineRunId } });
+        if (pipelineRun) {
+          const startTime = pipelineRun.createdAt.getTime();
+          const endTime = d.completedAt.getTime();
+          totalLeadTimeMs += Math.max(0, endTime - startTime);
+          countedDeployments++;
+        }
+      }
+
+      if (countedDeployments > 0) {
+        avgLeadTimeHours = Math.round((totalLeadTimeMs / countedDeployments / 3600000) * 10) / 10;
+      }
+    }
+
+
+    // ── 4. MTTR from rollback events (T6.3 & T6.4) ────────────────────────────
+    const rollbacksQuery = this.rollbackRepo
       .createQueryBuilder('r')
       .where('r.triggeredAt >= :since', { since })
-      .andWhere('r.completedAt IS NOT NULL')
+      .andWhere('r.completedAt IS NOT NULL');
+
+    if (projectId) {
+      // Filter rollbacks by project by joining through the incident_alerts table
+      rollbacksQuery
+        .innerJoin('incident_alerts', 'i', 'r.incidentId = i.id')
+        .andWhere('i.projectId = :projectId', { projectId });
+    }
+
+    const rollbacks = await rollbacksQuery
       .select(['r.triggeredAt', 'r.completedAt'])
       .getMany();
 
@@ -116,35 +172,55 @@ export class AnalyticsService {
       avgMttrMinutes = Math.round(totalMs / rollbacks.length / 60000);
     }
 
-    // ── Trend data (last 8 days) ─────────────────────────────────────────────
+    // ── 5. Trend Data (Last 8 Days) (T6.3 & T6.4) ─────────────────────────────
     const trend: DoraMetrics['trend'] = [];
     for (let i = Math.min(days - 1, 7); i >= 0; i--) {
       const dayStart = new Date(Date.now() - i * 86400000);
       dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(dayStart.getTime() + 86400000);
 
-      const dayDeploys = await this.deploymentRepo
+      const dayDeploysQuery = this.deploymentRepo
         .createQueryBuilder('d')
-        .where('d.startedAt >= :start AND d.startedAt < :end', { start: dayStart, end: dayEnd })
-        .getCount();
+        .where('d.startedAt >= :start AND d.startedAt < :end', { start: dayStart, end: dayEnd });
 
-      const dayPipelineSuccesses = await this.pipelineRepo
+      if (projectId) {
+        dayDeploysQuery
+          .innerJoin(PipelineRun, 'pr', 'd.pipelineRunId = pr.id')
+          .andWhere('pr.projectId = :projectId', { projectId });
+      }
+      const dayDeploys = await dayDeploysQuery.getCount();
+
+      const dayPipelineSuccessesQuery = this.pipelineRepo
         .createQueryBuilder('pr')
         .where('pr.createdAt >= :start AND pr.createdAt < :end', { start: dayStart, end: dayEnd })
-        .andWhere('pr.status = :s', { s: 'success' })
-        .getCount();
+        .andWhere('pr.status = :s', { s: 'success' });
 
-      const dayFails = await this.deploymentRepo
+      if (projectId) {
+        dayPipelineSuccessesQuery.andWhere('pr.projectId = :projectId', { projectId });
+      }
+      const dayPipelineSuccesses = await dayPipelineSuccessesQuery.getCount();
+
+      const dayFailsQuery = this.deploymentRepo
         .createQueryBuilder('d')
         .where('d.startedAt >= :start AND d.startedAt < :end', { start: dayStart, end: dayEnd })
-        .andWhere('d.status IN (:...s)', { s: ['failed', 'rolled_back'] })
-        .getCount();
+        .andWhere('d.status IN (:...s)', { s: ['failed', 'rolled_back'] });
 
-      const dayFailedPipelines = await this.pipelineRepo
+      if (projectId) {
+        dayFailsQuery
+          .innerJoin(PipelineRun, 'pr', 'd.pipelineRunId = pr.id')
+          .andWhere('pr.projectId = :projectId', { projectId });
+      }
+      const dayFails = await dayFailsQuery.getCount();
+
+      const dayFailedPipelinesQuery = this.pipelineRepo
         .createQueryBuilder('pr')
         .where('pr.createdAt >= :start AND pr.createdAt < :end', { start: dayStart, end: dayEnd })
-        .andWhere('pr.status = :s', { s: 'failed' })
-        .getCount();
+        .andWhere('pr.status = :s', { s: 'failed' });
+
+      if (projectId) {
+        dayFailedPipelinesQuery.andWhere('pr.projectId = :projectId', { projectId });
+      }
+      const dayFailedPipelines = await dayFailedPipelinesQuery.getCount();
 
       trend.push({
         date: dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),

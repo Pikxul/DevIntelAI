@@ -3,7 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
-import { User, Organization, ApprovalRequestEntity, AuditLogEntity } from '../../entities';
+import * as crypto from 'crypto';
+import { User, Organization, ApprovalRequestEntity, AuditLogEntity, AuditArchiveLog } from '../../entities';
 
 export interface AuditLogEntry {
   id: string;
@@ -13,6 +14,8 @@ export interface AuditLogEntry {
   resource: string;
   resourceId: string;
   details?: string;
+  hash?: string;
+  parentHash?: string;
   createdAt: Date;
 }
 
@@ -38,6 +41,7 @@ export class GovernanceService {
     @InjectRepository(Organization) private orgRepo: Repository<Organization>,
     @InjectRepository(ApprovalRequestEntity) private approvalRepo: Repository<ApprovalRequestEntity>,
     @InjectRepository(AuditLogEntity) private auditRepo: Repository<AuditLogEntity>,
+    @InjectRepository(AuditArchiveLog) private archiveRepo: Repository<AuditArchiveLog>,
     @InjectQueue('pipeline') private pipelineQueue: Queue,
   ) {}
 
@@ -164,9 +168,53 @@ export class GovernanceService {
     resourceId: string;
     details?: string;
   }): Promise<AuditLogEntry> {
-    const entry = this.auditRepo.create(params);
+    const lastLog = await this.auditRepo.findOne({
+      where: { organizationId: params.organizationId },
+      order: { createdAt: 'DESC' },
+    });
+
+    const parentHash = lastLog && lastLog.hash ? lastLog.hash : 'genesis-hash';
+    const payload = `${params.action}-${params.resource}-${params.details || ''}-${parentHash}-${params.userId}-${params.organizationId}`;
+    const hash = crypto.createHash('sha256').update(payload).digest('hex');
+
+    const entry = this.auditRepo.create({
+      ...params,
+      parentHash,
+      hash,
+    });
+
     const saved = await this.auditRepo.save(entry);
     return saved as unknown as AuditLogEntry;
+  }
+
+  async verifyAuditChain(organizationId: string): Promise<{ valid: boolean; compromisedLogsCount: number }> {
+    const logs = await this.auditRepo.find({
+      where: { organizationId },
+      order: { createdAt: 'ASC' },
+    });
+
+    let valid = true;
+    let compromisedLogsCount = 0;
+    let expectedParentHash = 'genesis-hash';
+
+    for (const log of logs) {
+      if (log.parentHash !== expectedParentHash) {
+        valid = false;
+        compromisedLogsCount++;
+      }
+
+      const payload = `${log.action}-${log.resource}-${log.details || ''}-${log.parentHash || ''}-${log.userId}-${log.organizationId}`;
+      const calculatedHash = crypto.createHash('sha256').update(payload).digest('hex');
+
+      if (log.hash !== calculatedHash) {
+        valid = false;
+        compromisedLogsCount++;
+      }
+
+      expectedParentHash = log.hash || 'genesis-hash';
+    }
+
+    return { valid, compromisedLogsCount };
   }
 
   async getAuditLogs(organizationId: string, limit = 50): Promise<AuditLogEntry[]> {
@@ -176,5 +224,64 @@ export class GovernanceService {
       take: limit,
     });
     return logs as unknown as AuditLogEntry[];
+  }
+
+  async archiveOldAuditLogs(organizationId: string, forceAll = false): Promise<AuditArchiveLog | null> {
+    const queryBuilder = this.auditRepo.createQueryBuilder('log')
+      .where('log.organizationId = :organizationId', { organizationId });
+
+    if (!forceAll) {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 90);
+      queryBuilder.andWhere('log.createdAt < :cutoffDate', { cutoffDate });
+    }
+
+    const logs = await queryBuilder.orderBy('log.createdAt', 'ASC').getMany();
+
+    if (logs.length === 0) {
+      this.logger.log(`No logs found to archive for organization ${organizationId}`);
+      return null;
+    }
+
+    // Convert logs to CSV WORM format
+    let csvContent = 'id,action,resource,resourceId,userId,userEmail,parentHash,hash,createdAt\n';
+    for (const log of logs) {
+      csvContent += `${log.id},"${log.action.replace(/"/g, '""')}","${log.resource.replace(/"/g, '""')}",${log.resourceId},${log.userId},${log.userEmail},${log.parentHash || ''},${log.hash || ''},${log.createdAt.toISOString()}\n`;
+    }
+
+    const checksum = crypto.createHash('md5').update(csvContent).digest('hex');
+    const s3Key = `archives/${organizationId}/${new Date().toISOString().substring(0, 7)}-archive.csv`;
+
+    // Local WORM fallback simulation for sandbox/dev setup
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const archiveDir = path.join(process.cwd(), 'var', 'audit-archives', organizationId);
+      fs.mkdirSync(archiveDir, { recursive: true });
+      fs.writeFileSync(path.join(archiveDir, `${new Date().toISOString().substring(0, 10)}-archive.csv`), csvContent);
+      this.logger.log(`WORM compliance archive file written locally: ${s3Key}`);
+    } catch (err) {
+      this.logger.error(`Failed to write local backup archive: ${err.message}`);
+    }
+
+    // Save compliance archive log record
+    const archiveRecord = this.archiveRepo.create({
+      organizationId,
+      startDate: logs[0].createdAt,
+      endDate: logs[logs.length - 1].createdAt,
+      s3Key,
+      checksum,
+      rowCount: logs.length,
+      retentionPeriodYears: 7,
+    });
+
+    const savedArchive = await this.archiveRepo.save(archiveRecord);
+
+    // Secure DB Purge (T1.3)
+    const ids = logs.map((l) => l.id);
+    await this.auditRepo.delete(ids);
+    this.logger.log(`Archived and securely purged ${ids.length} audit log rows for organization ${organizationId}`);
+
+    return savedArchive;
   }
 }

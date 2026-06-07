@@ -1,0 +1,33 @@
+DEVINTEL AI - BACKEND SCHEMA
+
+Core Tables:
+- Organizations
+- Users
+- Roles
+- Permissions
+- Repositories
+- Commits
+- Pull Requests
+- Deployments
+- Risk Analysis
+- AI Analysis
+- Incidents
+- Incident Timeline
+- Policies
+- Approval Requests
+- Notifications
+- Audit Logs
+- Webhook Events
+
+Database:
+- PostgreSQL
+- Prisma ORM
+
+Cache:
+- Redis
+
+Queues:
+- BullMQ
+
+Architecture:
+Multi-tenant, audit-ready, governance-ready.

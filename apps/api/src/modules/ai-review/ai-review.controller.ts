@@ -6,7 +6,7 @@ import { AIReviewService } from './ai-review.service';
 @ApiTags('ai-review')
 @ApiBearerAuth()
 @UseGuards(AuthGuard('jwt'))
-@Controller('ai-review')
+@Controller(['ai-review', 'ai-reviews'])
 export class AIReviewController {
   constructor(private readonly service: AIReviewService) {}
 

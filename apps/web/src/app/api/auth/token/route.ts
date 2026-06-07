@@ -16,18 +16,6 @@ export async function GET() {
   const encodedSecret = new TextEncoder().encode(secret);
 
   if (!session?.user) {
-    if (process.env.NEXTAUTH_DEV_BYPASS === 'true' || process.env.NODE_ENV === 'development') {
-      const devToken = await new SignJWT({
-        sub: 'dev-user-id',
-        email: 'dev@aidevops.local',
-        name: 'Dev User',
-        org: 'default-org',
-        role: 'admin',
-      })
-        .setProtectedHeader({ alg: 'HS256' })
-        .sign(encodedSecret);
-      return NextResponse.json({ token: devToken });
-    }
     return NextResponse.json({ token: null }, { status: 401 });
   }
 

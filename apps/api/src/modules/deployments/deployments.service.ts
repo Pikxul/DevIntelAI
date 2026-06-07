@@ -67,11 +67,34 @@ export class DeploymentsService {
     return this.repo.findOne({ where: { id: deploymentId } });
   }
 
+  async findLatestForProject(projectId: string): Promise<Deployment | null> {
+    this.logger.log(`Finding latest active deployment for project ${projectId}`);
+    return this.repo.createQueryBuilder('d')
+      .innerJoin('pipeline_runs', 'p', 'd.pipelineRunId = p.id')
+      .where('p.projectId = :projectId', { projectId })
+      .orderBy('d.startedAt', 'DESC')
+      .getOne();
+  }
+
   async findAll(limit = 20): Promise<Deployment[]> {
     return this.repo.find({ order: { startedAt: 'DESC' }, take: limit });
   }
 
   async findOne(id: string): Promise<Deployment | null> {
     return this.repo.findOne({ where: { id } });
+  }
+
+  async getStats() {
+    const deployments = await this.repo.find({ take: 200, order: { startedAt: 'DESC' } });
+    const total = deployments.length;
+    const succeeded = deployments.filter(d => d.status === 'success').length;
+    const failed = deployments.filter(d => d.status === 'failed').length;
+    const rolledBack = deployments.filter(d => d.rolledBackAt !== null).length;
+    const byStrategy = {
+      rolling: deployments.filter(d => d.strategy === 'rolling').length,
+      blue_green: deployments.filter(d => d.strategy === 'blue_green').length,
+      canary: deployments.filter(d => d.strategy === 'canary').length,
+    };
+    return { total, succeeded, failed, rolledBack, byStrategy };
   }
 }

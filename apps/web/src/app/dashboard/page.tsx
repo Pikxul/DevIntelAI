@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { usePipelineStats, useAIReviewStats, useRecentPipelines, usePipelineChartData } from '@/hooks/useDashboard';
+import { usePipelineStats, useAIReviewStats, useRecentPipelines, usePipelineChartData, useActiveAlerts } from '@/hooks/useDashboard';
 import { useRealtimeDashboard } from '@/hooks/useRealtimeDashboard';
 import { ArrowUpCircle, Bot, Shield, FlaskConical, Database, Rocket, TrendingUp, CheckCircle2, XCircle, RefreshCw, Slash, Clock, AlertTriangle, AlertCircle, Cpu, FileText, Activity, Sliders, Zap, Search } from 'lucide-react';
 
@@ -44,6 +44,7 @@ export default function DashboardPage() {
   const { stats: initialAiStats } = useAIReviewStats();
   const { pipelines, isLoading: pipelinesLoading } = useRecentPipelines();
   const chartData = usePipelineChartData();
+  const { alerts, isLoading: alertsLoading } = useActiveAlerts();
 
   const { pipelineStats, aiStats } = useRealtimeDashboard(initialPipelineStats, initialAiStats);
 
@@ -57,68 +58,51 @@ export default function DashboardPage() {
 
   const successRate = pipelineStats ? `${pipelineStats.successRate}%` : '99.8%';
 
-  const [scaleSuccess, setScaleSuccess] = useState(false);
-  const [scaleLoading, setScaleLoading] = useState(false);
-
-  const handleAutoScale = () => {
-    setScaleLoading(true);
-    setTimeout(() => { setScaleLoading(false); setScaleSuccess(true); }, 1200);
-  };
-
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-      {/* ── Critical Alert Banner ────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={{
-          background: 'linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(139,92,246,0.08) 100%)',
-          border: '1px solid rgba(239,68,68,0.3)',
-          borderRadius: 'var(--radius-lg)',
-          padding: 'clamp(1rem, 2vw, 1.25rem) clamp(1rem, 2vw, 1.5rem)',
-          boxShadow: '0 8px 30px rgba(0,0,0,0.3)'
-        }}
-      >
-        <div className="alert-banner">
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-            <AlertCircle size={28} className="text-red-500 animate-pulse" style={{ flexShrink: 0, marginTop: '0.25rem' }} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 800, fontSize: 'clamp(0.875rem, 2vw, 0.9375rem)', color: 'var(--text-primary)' }}>Critical CPU Anomaly Detected</span>
-                <span className="badge badge-danger" style={{ fontSize: '0.625rem' }}>PRODUCTION</span>
+      {/* ── Active Alert Banners ────────────────────────────────────────── */}
+      {alerts && alerts.map((alert) => (
+        <motion.div
+          key={alert.id}
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            background: 'linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(139,92,246,0.08) 100%)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 'var(--radius-lg)',
+            padding: 'clamp(1rem, 2vw, 1.25rem) clamp(1rem, 2vw, 1.5rem)',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.3)'
+          }}
+        >
+          <div className="alert-banner">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+              <AlertCircle size={28} className={alert.severity === 'critical' || alert.severity === 'high' ? 'text-red-500 animate-pulse' : 'text-amber-500'} style={{ flexShrink: 0, marginTop: '0.25rem' }} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, fontSize: 'clamp(0.875rem, 2vw, 0.9375rem)', color: 'var(--text-primary)' }}>{alert.title}</span>
+                  <span className={`badge ${alert.severity === 'critical' || alert.severity === 'high' ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '0.625rem' }}>
+                    {alert.severity.toUpperCase()}
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  {alert.description}
+                  {alert.recommendation && (
+                    <span style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-primary)', fontWeight: 500 }}>
+                      💡 Recommendation: {alert.recommendation}
+                    </span>
+                  )}
+                </p>
               </div>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                Service <code style={{ color: 'var(--accent-cyan)' }}>data-processor-svc</code> is running at 85% CPU in cluster <code style={{ color: 'var(--accent-purple-light)' }}>prod-us-east-1</code>.
-                AI reasoning indicates potential OOM within 45 minutes.
-              </p>
+            </div>
+            <div className="alert-banner-actions">
+              <Link href="/dashboard/incidents" className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
+                <Search size={12} /> Incident Logs
+              </Link>
             </div>
           </div>
-          <div className="alert-banner-actions">
-            {scaleSuccess ? (
-              <span className="badge badge-success" style={{ padding: '0.5rem 1rem', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
-                <CheckCircle2 size={14} /> Scaled to 4 Replicas
-              </span>
-            ) : (
-              <button
-                onClick={handleAutoScale}
-                disabled={scaleLoading}
-                className="btn btn-primary btn-sm"
-                style={{ background: 'var(--gradient-brand)', border: 'none', color: 'white', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}
-              >
-                {scaleLoading ? (
-                  <><Clock size={12} className="animate-spin" /> Scaling...</>
-                ) : (
-                  <><Zap size={12} /> Auto-Scale</>
-                )}
-              </button>
-            )}
-            <Link href="/dashboard/incidents" className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
-              <Search size={12} /> Incident Logs
-            </Link>
-          </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      ))}
 
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="page-header-row">

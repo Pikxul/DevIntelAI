@@ -11,6 +11,7 @@ import { GovernanceModule } from '../governance/governance.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { DeploymentsModule } from '../deployments/deployments.module';
+import { GatewayModule } from '../gateway/gateway.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { DeploymentsModule } from '../deployments/deployments.module';
     // Processor dependencies
     forwardRef(() => AIReviewModule),
     forwardRef(() => DeploymentsModule),
+    forwardRef(() => GatewayModule),
     PolicyEngineModule,
     GovernanceModule,
     NotificationsModule,

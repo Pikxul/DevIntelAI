@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import pRetry from 'p-retry';
-import type { AIReviewResult, RiskScore, AnomalyAlert, MetricSnapshot, CodeIssue, RiskLevel } from '@aidevops/shared-types';
+import type { AIReviewResult, RiskScore, AnomalyAlert, MetricSnapshot, CodeIssue, RiskLevel, SecurityScanResult, SecurityFinding } from '@aidevops/shared-types';
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -43,6 +43,11 @@ const PR_SUMMARY_PROMPT = `You are an expert technical writer and senior softwar
 Analyze the provided git diff and PR title, and generate a comprehensive Pull Request summary.
 Return a JSON response with a single "summary" field formatted in Markdown.`;
 
+const SECURITY_SCAN_SYSTEM_PROMPT = `You are a cybersecurity expert and senior site reliability engineer.
+Perform a dedicated static application security testing (SAST) review of the provided code diff.
+Identify vulnerabilities including OWASP Top 10, SQL injection, XSS, CSRF, insecure dependencies, hardcoded credentials, buffer overflows, path traversal, authorization bypass.
+Always return valid JSON matching the specified security scan schema.`;
+
 // ─── Cost Tracking ────────────────────────────────────────────────────────────
 
 const COST_PER_1K_TOKENS: Record<string, { input: number; output: number }> = {
@@ -76,13 +81,19 @@ function parseRiskLevel(score: number): RiskLevel {
 function buildReviewResultFromJSON(
   raw: Record<string, unknown>,
   pipelineRunId: string,
-  provider: 'openai' | 'anthropic',
+  provider: 'openai' | 'anthropic' | 'gemini',
   model: string,
   tokensUsed: number,
   costUsd: number,
   riskThreshold: number,
 ): AIReviewResult {
   const overallScore = typeof raw.riskScore === 'number' ? raw.riskScore : 50;
+  const dynamicConfidence = typeof raw.confidence === 'number' ? raw.confidence : Math.max(40, 100 - overallScore);
+  const rawIssues = Array.isArray(raw.issues) ? raw.issues : [];
+  const evidence: string[] = Array.isArray(raw.evidence)
+    ? (raw.evidence as string[])
+    : rawIssues.map((i: any) => `${i.category ?? 'logic'}: ${i.title || i.description || 'Code issue'}`);
+
   const riskScore: RiskScore = {
     overall: overallScore,
     security: typeof raw.securityScore === 'number' ? raw.securityScore : overallScore,
@@ -91,6 +102,8 @@ function buildReviewResultFromJSON(
     maintainability: typeof raw.maintainabilityScore === 'number' ? raw.maintainabilityScore : overallScore,
     level: parseRiskLevel(overallScore),
     summary: typeof raw.summary === 'string' ? raw.summary : 'AI review complete.',
+    confidence: dynamicConfidence,
+    evidence,
   };
 
   const issues: CodeIssue[] = Array.isArray(raw.issues)
@@ -158,17 +171,29 @@ export class AIClient {
 
   // ─── Gemini helper ────────────────────────────────────────────────────────────
 
-  private async callGemini(systemPrompt: string, userPrompt: string): Promise<string> {
+  private async callGemini(
+    systemPrompt: string,
+    userPrompt: string,
+    expectJson = false,
+  ): Promise<{ text: string; usage?: { promptTokens: number; completionTokens: number } }> {
     if (!this.gemini) throw new Error('Gemini not configured');
     const model = this.gemini.getGenerativeModel({
       model: this.config.geminiModel,
       systemInstruction: systemPrompt,
+      generationConfig: expectJson ? { responseMimeType: 'application/json' } : undefined,
     });
     const result = await model.generateContent(userPrompt);
-    return result.response.text();
+    const text = result.response.text();
+    const usage = result.response.usageMetadata
+      ? {
+          promptTokens: result.response.usageMetadata.promptTokenCount ?? 0,
+          completionTokens: result.response.usageMetadata.candidatesTokenCount ?? 0,
+        }
+      : undefined;
+    return { text, usage };
   }
 
-  // ─── Fallback chain: Gemini → Anthropic → OpenAI ─────────────────────────────
+  // ─── Fallback chain respecting AI_PRIMARY_PROVIDER ───────────────────────────
 
   private async executeWithFallback<T>(
     geminiCall: () => Promise<T>,
@@ -176,58 +201,64 @@ export class AIClient {
     openaiCall: () => Promise<T>,
     operationName: string
   ): Promise<T> {
-    // 1. Try Gemini (primary)
-    const isGeminiCoolingDown = this.geminiRateLimitResetTime && Date.now() < this.geminiRateLimitResetTime;
-    if (this.gemini && !isGeminiCoolingDown) {
-      try {
-        const result = await geminiCall();
-        this.geminiRateLimitResetTime = null;
-        return result;
-      } catch (err: any) {
-        if (err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('quota')) {
-          const retryAfterMs = err?.headers?.['retry-after'] ? parseInt(err.headers['retry-after'], 10) * 1000 : 60000;
-          if (retryAfterMs <= 60000) {
-            console.log(`[${operationName}] Gemini rate limit — refreshing in ${retryAfterMs / 1000}s. Waiting...`);
-            await new Promise(res => setTimeout(res, retryAfterMs));
-            return geminiCall();
+    const providers = ['gemini', 'anthropic', 'openai'];
+    const primary = this.config.primaryProvider;
+    
+    // Sort providers so that the primary is tried first
+    const executionOrder = [
+      primary,
+      ...providers.filter(p => p !== primary)
+    ];
+
+    const errors: Error[] = [];
+
+    for (const provider of executionOrder) {
+      if (provider === 'gemini' && this.gemini) {
+        const isGeminiCoolingDown = this.geminiRateLimitResetTime && Date.now() < this.geminiRateLimitResetTime;
+        if (!isGeminiCoolingDown) {
+          try {
+            const result = await geminiCall();
+            this.geminiRateLimitResetTime = null;
+            return result;
+          } catch (err: any) {
+            console.warn(`[${operationName}] Gemini error: ${err.message}. Falling back.`);
+            if (err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('quota')) {
+              this.geminiRateLimitResetTime = Date.now() + 60000;
+            }
+            errors.push(err);
           }
-          console.warn(`[${operationName}] Gemini quota exhausted. Falling back to Anthropic.`);
-          this.geminiRateLimitResetTime = Date.now() + retryAfterMs;
-        } else {
-          console.warn(`[${operationName}] Gemini error: ${err.message}. Falling back to Anthropic.`);
+        }
+      }
+
+      if (provider === 'anthropic' && this.anthropic) {
+        const isAnthropicCoolingDown = this.anthropicRateLimitResetTime && Date.now() < this.anthropicRateLimitResetTime;
+        if (!isAnthropicCoolingDown) {
+          try {
+            const result = await anthropicCall();
+            this.anthropicRateLimitResetTime = null;
+            return result;
+          } catch (err: any) {
+            console.warn(`[${operationName}] Anthropic error: ${err.message}. Falling back.`);
+            if (err?.status === 429 || err?.message?.includes('429') || err?.status === 402) {
+              this.anthropicRateLimitResetTime = Date.now() + 60000;
+            }
+            errors.push(err);
+          }
+        }
+      }
+
+      if (provider === 'openai' && this.openai) {
+        try {
+          const result = await openaiCall();
+          return result;
+        } catch (err: any) {
+          console.warn(`[${operationName}] OpenAI error: ${err.message}. Falling back.`);
+          errors.push(err);
         }
       }
     }
 
-    // 2. Try Anthropic (secondary)
-    const isAnthropicCoolingDown = this.anthropicRateLimitResetTime && Date.now() < this.anthropicRateLimitResetTime;
-    if (this.anthropic && !isAnthropicCoolingDown) {
-      try {
-        const result = await anthropicCall();
-        this.anthropicRateLimitResetTime = null;
-        return result;
-      } catch (err: any) {
-        if (err?.status === 429 || err?.message?.includes('429') || err?.status === 402) {
-          const retryAfterMs = err?.headers?.['retry-after'] ? parseInt(err.headers['retry-after'], 10) * 1000 : 60000;
-          if (retryAfterMs <= 60000) {
-            console.log(`[${operationName}] Anthropic limit refreshing in ${retryAfterMs / 1000}s. Waiting...`);
-            await new Promise(res => setTimeout(res, retryAfterMs));
-            return anthropicCall();
-          }
-          console.warn(`[${operationName}] Anthropic exhausted. Falling back to OpenAI.`);
-          this.anthropicRateLimitResetTime = Date.now() + retryAfterMs;
-        } else {
-          console.warn(`[${operationName}] Anthropic error: ${err.message}. Falling back to OpenAI.`);
-        }
-      }
-    }
-
-    // 3. Last resort: OpenAI
-    if (this.openai) {
-      return openaiCall();
-    }
-
-    throw new Error(`[${operationName}] No AI providers available (all exhausted or not configured).`);
+    throw new Error(`[${operationName}] All configured AI providers failed. Errors: ${errors.map(e => e.message).join(' | ')}`);
   }
 
   // ─── Code Review ─────────────────────────────────────────────────────────────
@@ -257,13 +288,16 @@ export class AIClient {
   }
 
   private async reviewWithGemini(prompt: string, pipelineRunId: string): Promise<AIReviewResult> {
-    const text = await this.callGemini(CODE_REVIEW_SYSTEM_PROMPT, prompt);
+    const { text, usage } = await this.callGemini(CODE_REVIEW_SYSTEM_PROMPT, prompt, true);
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const raw = jsonMatch ? (JSON.parse(jsonMatch[0]) as Record<string, unknown>) : {};
-    const costUsd = calculateCost(this.config.geminiModel, 0, 0);
+    const inputTokens = usage?.promptTokens ?? 0;
+    const outputTokens = usage?.completionTokens ?? 0;
+    const tokensUsed = inputTokens + outputTokens;
+    const costUsd = calculateCost(this.config.geminiModel, inputTokens, outputTokens);
     return buildReviewResultFromJSON(
-      raw, pipelineRunId, 'openai', this.config.geminiModel,
-      0, costUsd, this.config.riskThreshold,
+      raw, pipelineRunId, 'gemini', this.config.geminiModel,
+      tokensUsed, costUsd, this.config.riskThreshold,
     );
   }
 
@@ -345,7 +379,7 @@ Return JSON: { anomalyDetected: boolean, type?: string, severity?: string, title
         async () => {
           return this.executeWithFallback(
             async () => {
-              const text = await this.callGemini(ANOMALY_DETECTION_PROMPT, prompt);
+              const { text } = await this.callGemini(ANOMALY_DETECTION_PROMPT, prompt, true);
               const jsonMatch = text.match(/\{[\s\S]*\}/);
               return jsonMatch ? JSON.parse(jsonMatch[0]) : {};
             },
@@ -416,7 +450,7 @@ Return JSON: { anomalyDetected: boolean, type?: string, severity?: string, title
       async () => {
         return this.executeWithFallback(
           async () => {
-            const text = await this.callGemini(COMMIT_MESSAGE_PROMPT, prompt);
+            const { text } = await this.callGemini(COMMIT_MESSAGE_PROMPT, prompt, true);
             const jsonMatch = text.match(/\{[\s\S]*\}/);
             const content = jsonMatch ? JSON.parse(jsonMatch[0]) : { message: 'Update code' };
             return content.message as string;
@@ -463,7 +497,7 @@ Return JSON: { anomalyDetected: boolean, type?: string, severity?: string, title
       async () => {
         return this.executeWithFallback(
           async () => {
-            const text = await this.callGemini(PR_SUMMARY_PROMPT, prompt);
+            const { text } = await this.callGemini(PR_SUMMARY_PROMPT, prompt, true);
             const jsonMatch = text.match(/\{[\s\S]*\}/);
             const content = jsonMatch ? JSON.parse(jsonMatch[0]) : { summary: 'PR Summary unavailable' };
             return content.summary as string;
@@ -515,7 +549,7 @@ Return JSON with: { summary: string, hypothesis: string, rootCause: string, affe
       async () => {
         return this.executeWithFallback(
           async () => {
-            const text = await this.callGemini('You are an SRE AI assistant.', prompt);
+            const { text } = await this.callGemini('You are an SRE AI assistant.', prompt, true);
             const jsonMatch = text.match(/\{[\s\S]*\}/);
             const content = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
             return {
@@ -573,6 +607,117 @@ Return JSON with: { summary: string, hypothesis: string, rootCause: string, affe
       },
       { retries: 2 },
     );
+  }
+
+  // ─── Security Review Pass ───────────────────────────────────────────────────
+
+  async scanSecurity(
+    diff: string,
+    pipelineRunId: string,
+  ): Promise<SecurityScanResult> {
+    const userPrompt = `Analyze this code diff specifically for security vulnerabilities and return JSON matching the security scan schema:
+    
+\`\`\`diff
+${diff}
+\`\`\`
+
+Return JSON format:
+{
+  "securityRiskScore": number,
+  "findings": [
+    {
+      "id": string,
+      "tool": "semgrep",
+      "severity": "critical" | "high" | "medium" | "low",
+      "ruleId": string,
+      "title": string,
+      "description": string,
+      "file": string,
+      "line": number,
+      "cve": string,
+      "cvss": number,
+      "fixAvailable": boolean,
+      "fixDescription": string
+    }
+  ],
+  "passed": boolean
+}`;
+
+    return pRetry(
+      async () => {
+        return this.executeWithFallback(
+          async () => {
+            const { text } = await this.callGemini(SECURITY_SCAN_SYSTEM_PROMPT, userPrompt, true);
+            return this.parseSecurityResult(text, pipelineRunId);
+          },
+          async () => {
+            if (!this.anthropic) throw new Error('Anthropic not configured');
+            const res = await this.anthropic.messages.create({
+              model: this.config.anthropicModel,
+              max_tokens: 4096,
+              system: SECURITY_SCAN_SYSTEM_PROMPT,
+              messages: [{ role: 'user', content: userPrompt }],
+            });
+            const content = res.content[0];
+            const text = content.type === 'text' ? content.text : '{}';
+            return this.parseSecurityResult(text, pipelineRunId);
+          },
+          async () => {
+            if (!this.openai) throw new Error('OpenAI not configured');
+            const response = await this.openai.chat.completions.create({
+              model: this.config.openaiModel,
+              messages: [
+                { role: 'system', content: SECURITY_SCAN_SYSTEM_PROMPT },
+                { role: 'user', content: userPrompt },
+              ],
+              response_format: { type: 'json_object' },
+              temperature: 0.1,
+            });
+            const content = response.choices[0]?.message?.content ?? '{}';
+            return this.parseSecurityResult(content, pipelineRunId);
+          },
+          'scanSecurity'
+        );
+      },
+      { retries: this.config.maxRetries },
+    );
+  }
+
+  private parseSecurityResult(text: string, pipelineRunId: string): SecurityScanResult {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const raw = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    const findings = Array.isArray(raw.findings) ? raw.findings : [];
+    
+    const criticalCount = findings.filter((f: any) => f.severity === 'critical').length;
+    const highCount = findings.filter((f: any) => f.severity === 'high').length;
+    const mediumCount = findings.filter((f: any) => f.severity === 'medium').length;
+    const lowCount = findings.filter((f: any) => f.severity === 'low').length;
+
+    return {
+      id: crypto.randomUUID(),
+      pipelineRunId,
+      tool: 'AI Security Pass',
+      findings: findings.map((f: any) => ({
+        id: f.id || crypto.randomUUID(),
+        tool: f.tool || 'eslint',
+        severity: f.severity || 'medium',
+        ruleId: f.ruleId || 'security-general',
+        title: f.title || 'Insecure Pattern',
+        description: f.description || 'Suspicious coding pattern detected by AI scan.',
+        file: f.file || 'unknown',
+        line: typeof f.line === 'number' ? f.line : 1,
+        cve: f.cve,
+        cvss: typeof f.cvss === 'number' ? f.cvss : undefined,
+        fixAvailable: typeof f.fixAvailable === 'boolean' ? f.fixAvailable : false,
+        fixDescription: f.fixDescription,
+      })),
+      criticalCount,
+      highCount,
+      mediumCount,
+      lowCount,
+      passed: typeof raw.passed === 'boolean' ? raw.passed : (criticalCount === 0 && highCount === 0),
+      scannedAt: new Date().toISOString(),
+    };
   }
 
   // ─── Health Check ─────────────────────────────────────────────────────────────

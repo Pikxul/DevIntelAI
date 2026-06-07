@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PipelinePolicy } from '../../entities/PipelinePolicy';
+import { Project } from '../../entities';
 import type { AIReviewResult, PolicyDecision } from '@aidevops/shared-types';
 
 @Injectable()
@@ -10,12 +11,28 @@ export class PolicyEngineService {
 
   constructor(
     @InjectRepository(PipelinePolicy) private repo: Repository<PipelinePolicy>,
+    @InjectRepository(Project) private projectRepo: Repository<Project>,
   ) {}
 
   async evaluate(review: AIReviewResult, organizationId: string, projectId?: string): Promise<{ decision: PolicyDecision; reason?: string }> {
     this.logger.log(`Evaluating policies for organization ${organizationId}`);
+
+    // 1. Enforce Project-Specific Risk Thresholds (T4.3)
+    if (projectId) {
+      const project = await this.projectRepo.findOne({ where: { id: projectId } });
+      if (project && review.riskScore && typeof review.riskScore.overall === 'number') {
+        const overallRisk = review.riskScore.overall;
+        if (overallRisk >= project.riskThreshold) {
+          this.logger.log(`🚫 Project risk threshold gate triggered: ${overallRisk} >= ${project.riskThreshold}`);
+          return {
+            decision: 'needs_review',
+            reason: `AI Overall Risk Score (${overallRisk}/100) meets or exceeds project risk threshold of ${project.riskThreshold}/100`,
+          };
+        }
+      }
+    }
     
-    // Fetch active policies for this org/project
+    // 2. Fetch active policies for this org/project
     const policies = await this.repo.find({
       where: [
         { organizationId, projectId, enabled: true },

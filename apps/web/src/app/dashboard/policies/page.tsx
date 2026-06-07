@@ -1,38 +1,75 @@
 'use client';
 import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
-import { getPolicies, createPolicy, deletePolicy, Policy } from '@/lib/api';
-import { Shield, Plus, CheckCircle2, FileText, Trash2, ShieldAlert, ShieldCheck, ShieldOff, MinusCircle, Clock, AlertTriangle } from 'lucide-react';
+import { getPolicies, createPolicy, updatePolicy, deletePolicy, togglePolicy, Policy } from '@/lib/api';
+import { Shield, Plus, CheckCircle2, FileText, Trash2, Edit2, ShieldAlert, ShieldCheck, ShieldOff, MinusCircle, Clock, AlertTriangle } from 'lucide-react';
 
 const DEFAULT_ORG = 'default-org';
 
-function NewPolicyModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+interface RuleState {
+  field: string;
+  operator: string;
+  value: string;
+}
+
+function PolicyModal({ onClose, onSuccess, policy }: { onClose: () => void; onSuccess: () => void; policy?: Policy }) {
   const [form, setForm] = useState({
-    name: '',
-    description: '',
-    action: 'blocked',
-    priority: '80',
-    field: 'overall_risk',
-    operator: 'gt',
-    value: '70',
+    name: policy?.name ?? '',
+    description: policy?.description ?? '',
+    action: policy?.action ?? 'blocked',
+    priority: policy ? String(policy.priority) : '80',
   });
+
+  const [rules, setRules] = useState<RuleState[]>(
+    policy
+      ? policy.rules.map(r => ({ field: r.field, operator: r.operator, value: String(r.value) }))
+      : [{ field: 'overall_risk', operator: 'gt', value: '70' }]
+  );
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const addRule = () => {
+    setRules(prev => [...prev, { field: 'overall_risk', operator: 'gt', value: '70' }]);
+  };
+
+  const removeRule = (idx: number) => {
+    if (rules.length === 1) return;
+    setRules(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleRuleChange = (idx: number, key: keyof RuleState, val: string) => {
+    setRules(prev => prev.map((r, i) => i === idx ? { ...r, [key]: val } : r));
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (rules.length === 0) {
+      setError('Please add at least one rule condition.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      await createPolicy({
+      const payload = {
         organizationId: DEFAULT_ORG,
         name: form.name,
         description: form.description,
         action: form.action as Policy['action'],
         priority: parseInt(form.priority),
-        enabled: true,
-        rules: [{ field: form.field, operator: form.operator as any, value: parseInt(form.value) }],
-      });
+        enabled: policy ? policy.enabled : true,
+        rules: rules.map(r => ({
+          field: r.field,
+          operator: r.operator as any,
+          value: parseInt(r.value) || 0
+        })),
+      };
+
+      if (policy) {
+        await updatePolicy(policy.id, payload);
+      } else {
+        await createPolicy(payload);
+      }
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -50,11 +87,11 @@ function NewPolicyModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '2rem', width: '100%', maxWidth: 520 }}
+        style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '2rem', width: '100%', maxWidth: 540 }}
       >
         <div className="flex items-center justify-between" style={{ marginBottom: '1.5rem' }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Shield size={18} className="text-purple-400" /> New Policy
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+            <Shield size={18} className="text-purple-400" /> {policy ? 'Edit Policy' : 'New Policy'}
           </h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.25rem' }}>✕</button>
         </div>
@@ -82,7 +119,7 @@ function NewPolicyModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
             <div>
               <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, marginBottom: 6, color: 'var(--text-secondary)' }}>Action</label>
               <select
-                value={form.action} onChange={e => setForm(p => ({ ...p, action: e.target.value }))}
+                value={form.action} onChange={e => setForm(p => ({ ...p, action: e.target.value as any }))}
                 style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '0.6rem 0.875rem', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
               >
                 <option value="blocked">Block</option>
@@ -100,35 +137,49 @@ function NewPolicyModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
             </div>
           </div>
 
-          <div style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)', borderRadius: 'var(--radius-sm)', padding: '1rem' }}>
-            <div className="text-xs text-muted" style={{ marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Rule Condition (AND logic)</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '0.75rem', alignItems: 'center' }}>
-              <select
-                value={form.field} onChange={e => setForm(p => ({ ...p, field: e.target.value }))}
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '0.5rem', fontSize: '0.8125rem', outline: 'none' }}
-              >
-                <option value="overall_risk">Overall Risk Score</option>
-                <option value="security_risk">Security Risk</option>
-                <option value="quality_risk">Quality Risk</option>
-                <option value="critical_issues">Critical Issues Count</option>
-                <option value="high_issues">High Issues Count</option>
-              </select>
-              <select
-                value={form.operator} onChange={e => setForm(p => ({ ...p, operator: e.target.value }))}
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '0.5rem', fontSize: '0.8125rem', outline: 'none' }}
-              >
-                <option value="gt">&gt; greater than</option>
-                <option value="gte">≥ at least</option>
-                <option value="lt">&lt; less than</option>
-                <option value="lte">≤ at most</option>
-                <option value="eq">= equals</option>
-              </select>
-              <input
-                type="number" min="0" max="100" value={form.value}
-                onChange={e => setForm(p => ({ ...p, value: e.target.value }))}
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '0.5rem', fontSize: '0.8125rem', outline: 'none', textAlign: 'center' }}
-              />
+          <div style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)', borderRadius: 'var(--radius-sm)', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="text-xs text-muted flex items-center justify-between" style={{ letterSpacing: '0.05em', fontWeight: 600 }}>
+              <span>RULE CONDITIONS (AND LOGIC)</span>
+              <button type="button" className="btn btn-secondary" onClick={addRule} style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', background: 'rgba(124,58,237,0.15)', color: 'var(--accent-purple-light)' }}>+ Add Rule</button>
             </div>
+            
+            {rules.map((rule, idx) => (
+              <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr auto 80px auto', gap: '0.5rem', alignItems: 'center' }}>
+                <select
+                  value={rule.field} onChange={e => handleRuleChange(idx, 'field', e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '0.4rem', fontSize: '0.8125rem', outline: 'none' }}
+                >
+                  <option value="overall_risk">Overall Risk Score</option>
+                  <option value="security_risk">Security Risk</option>
+                  <option value="quality_risk">Quality Risk</option>
+                  <option value="critical_issues">Critical Issues</option>
+                  <option value="high_issues">High Issues</option>
+                </select>
+                <select
+                  value={rule.operator} onChange={e => handleRuleChange(idx, 'operator', e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '0.4rem', fontSize: '0.8125rem', outline: 'none' }}
+                >
+                  <option value="gt">&gt;</option>
+                  <option value="gte">≥</option>
+                  <option value="lt">&lt;</option>
+                  <option value="lte">≤</option>
+                  <option value="eq">=</option>
+                </select>
+                <input
+                  type="number" min="0" max="100" value={rule.value}
+                  onChange={e => handleRuleChange(idx, 'value', e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', padding: '0.4rem', fontSize: '0.8125rem', outline: 'none', textAlign: 'center', width: '100%' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeRule(idx)}
+                  disabled={rules.length === 1}
+                  style={{ background: 'none', border: 'none', cursor: rules.length === 1 ? 'not-allowed' : 'pointer', color: 'var(--accent-red)', fontSize: '0.9rem', padding: '0 0.25rem', opacity: rules.length === 1 ? 0.3 : 0.8 }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
           </div>
 
           {error && (
@@ -141,9 +192,9 @@ function NewPolicyModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={loading} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
               {loading ? (
-                <><Clock size={14} className="animate-spin" /> Creating…</>
+                <><Clock size={14} className="animate-spin" /> Saving…</>
               ) : (
-                <><ShieldCheck size={14} /> Create Policy</>
+                <><ShieldCheck size={14} /> {policy ? 'Save Policy' : 'Create Policy'}</>
               )}
             </button>
           </div>
@@ -158,7 +209,9 @@ export default function PoliciesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [editingPolicy, setEditingPolicy] = useState<Policy | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const fetchPolicies = useCallback(async () => {
     try {
@@ -186,6 +239,18 @@ export default function PoliciesPage() {
     }
   };
 
+  const handleToggle = async (id: string) => {
+    setTogglingId(id);
+    try {
+      await togglePolicy(id);
+      await fetchPolicies();
+    } catch (err: any) {
+      alert(`Toggle failed: ${err.message}`);
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   const stats = {
     active: policies.filter(p => p.enabled).length,
     total: policies.length,
@@ -194,7 +259,16 @@ export default function PoliciesPage() {
 
   return (
     <div className="animate-fade-in">
-      {showModal && <NewPolicyModal onClose={() => setShowModal(false)} onSuccess={fetchPolicies} />}
+      {showModal && (
+        <PolicyModal
+          policy={editingPolicy || undefined}
+          onClose={() => {
+            setShowModal(false);
+            setEditingPolicy(null);
+          }}
+          onSuccess={fetchPolicies}
+        />
+      )}
 
       <div className="page-header flex items-center justify-between">
         <div>
@@ -203,7 +277,14 @@ export default function PoliciesPage() {
           </h1>
           <p className="page-subtitle">AI-driven policy rules, risk thresholds, and deployment gates</p>
         </div>
-        <button className="btn btn-primary" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }} onClick={() => setShowModal(true)}>
+        <button
+          className="btn btn-primary"
+          style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}
+          onClick={() => {
+            setEditingPolicy(null);
+            setShowModal(true);
+          }}
+        >
           <Plus size={16} /> New Policy
         </button>
       </div>
@@ -252,7 +333,7 @@ export default function PoliciesPage() {
                   <th>Priority</th>
                   <th>Action</th>
                   <th>Status</th>
-                  <th></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -264,7 +345,7 @@ export default function PoliciesPage() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {p.rules.map((r, ri) => (
                           <code key={ri} style={{ fontSize: '0.7rem', color: 'var(--accent-cyan)', background: 'rgba(6,182,212,0.1)', padding: '2px 6px', borderRadius: 4, display: 'inline-block' }}>
-                            {r.field} {r.operator} {r.value}
+                            {r.field.replace('_', ' ')} {r.operator} {r.value}
                           </code>
                         ))}
                       </div>
@@ -288,23 +369,43 @@ export default function PoliciesPage() {
                       )}
                     </td>
                     <td>
-                      <span className={p.enabled ? 'badge badge-success' : 'badge-neutral'} style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                        {p.enabled ? (
-                          <><CheckCircle2 size={10} /> Active</>
-                        ) : (
-                          <><MinusCircle size={10} /> Disabled</>
-                        )}
-                      </span>
+                      <button
+                        onClick={() => handleToggle(p.id)}
+                        disabled={togglingId === p.id}
+                        style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', outline: 'none' }}
+                      >
+                        <span className={p.enabled ? 'badge badge-success' : 'badge-neutral'} style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          {togglingId === p.id ? (
+                            <><Clock size={10} className="animate-spin" /> Updating</>
+                          ) : p.enabled ? (
+                            <><CheckCircle2 size={10} /> Active</>
+                          ) : (
+                            <><MinusCircle size={10} /> Disabled</>
+                          )}
+                        </span>
+                      </button>
                     </td>
                     <td>
-                      <button
-                        className="btn btn-sm"
-                        style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--accent-red)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        onClick={() => handleDelete(p.id)}
-                        disabled={deletingId === p.id}
-                      >
-                        {deletingId === p.id ? <Clock size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.35rem' }}
+                          onClick={() => {
+                            setEditingPolicy(p);
+                            setShowModal(true);
+                          }}
+                        >
+                          <Edit2 size={12} />
+                        </button>
+                        <button
+                          className="btn btn-sm"
+                          style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--accent-red)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.35rem' }}
+                          onClick={() => handleDelete(p.id)}
+                          disabled={deletingId === p.id}
+                        >
+                          {deletingId === p.id ? <Clock size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                        </button>
+                      </div>
                     </td>
                   </motion.tr>
                 ))}

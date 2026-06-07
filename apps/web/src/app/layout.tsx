@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { SessionProvider } from 'next-auth/react';
+import Providers from './providers';
 
 export const metadata: Metadata = {
   title: 'AI DevOps Platform | Intelligent Pipeline Orchestration',
@@ -27,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <SessionProvider>{children}</SessionProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

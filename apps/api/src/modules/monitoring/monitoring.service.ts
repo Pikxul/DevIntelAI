@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { getAIClient } from '@aidevops/ai-client';
 import { AnomalyAlert } from '../../entities';
 import type { MetricSnapshot } from '@aidevops/shared-types';
+import { EventsGateway } from '../gateway/gateway.module';
 
 @Injectable()
 export class MonitoringService {
@@ -11,6 +12,7 @@ export class MonitoringService {
 
   constructor(
     @InjectRepository(AnomalyAlert) private repo: Repository<AnomalyAlert>,
+    @Inject(forwardRef(() => EventsGateway)) private readonly eventsGateway: EventsGateway,
   ) {}
 
   async ingestMetrics(deploymentId: string, metrics: MetricSnapshot): Promise<AnomalyAlert | null> {
@@ -38,12 +40,29 @@ export class MonitoringService {
       autoRollbackTriggered: false,
     });
 
-    return this.repo.save(entity);
+    const saved = await this.repo.save(entity);
+
+    // Emit live WebSocket event
+    try {
+      this.eventsGateway.emitAnomalyAlert(saved);
+    } catch (err) {
+      this.logger.warn(`Failed to emit anomaly WebSocket alert: ${err.message}`);
+    }
+
+    return saved;
   }
 
   async getAnomalies(deploymentId?: string, limit = 20): Promise<AnomalyAlert[]> {
     const where = deploymentId ? { deploymentId } : {};
     return this.repo.find({ where, order: { detectedAt: 'DESC' }, take: limit });
+  }
+
+  async getActiveAlerts(): Promise<AnomalyAlert[]> {
+    return this.repo.find({
+      where: { autoRollbackTriggered: false },
+      order: { detectedAt: 'DESC' },
+      take: 10,
+    });
   }
 
   async markRollbackTriggered(alertId: string): Promise<void> {

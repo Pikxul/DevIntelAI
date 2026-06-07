@@ -9,7 +9,8 @@
     "lint": "next lint",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:report": "playwright show-report e2e-results/html-report"
+    "test:e2e:report": "playwright show-report e2e-results/html-report",
+    "test:e2e:mcp": "npx @playwright/mcp@latest --port 8931 --browser chrome --save-session --output-dir ./e2e-results/mcp-sessions"
   },
   "dependencies": {
     "@aidevops/shared-types": "workspace:*",
@@ -28,6 +29,7 @@
     "swr": "^2.2.5"
   },
   "devDependencies": {
+    "@playwright/mcp": "^0.0.75",
     "@playwright/test": "^1.44.0",
     "@types/node": "^20.12.12",
     "@types/react": "^18.3.1",

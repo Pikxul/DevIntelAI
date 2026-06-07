@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, BadRequestException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PipelinesService, CreatePipelineRunDto } from './pipelines.service';
@@ -17,7 +17,7 @@ export class PipelinesController {
   }
 
   @Post('trigger')
-  @ApiOperation({ summary: 'Manually trigger a demo pipeline run for testing' })
+  @ApiOperation({ summary: 'Manually trigger a pipeline run' })
   triggerDemo(
     @Body() body: {
       projectId?: string;
@@ -28,9 +28,16 @@ export class PipelinesController {
       diff?: string;
     },
   ) {
+    if (!body.projectId) {
+      throw new BadRequestException('projectId is required');
+    }
+    if (!body.organizationId) {
+      throw new BadRequestException('organizationId is required');
+    }
+
     return this.service.create({
-      projectId: body.projectId ?? 'demo-project',
-      organizationId: body.organizationId ?? 'default-org',
+      projectId: body.projectId,
+      organizationId: body.organizationId,
       commitSha: Math.random().toString(16).slice(2, 9),
       branch: body.branch ?? 'main',
       author: body.author ?? 'dev@example.com',

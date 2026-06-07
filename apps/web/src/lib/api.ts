@@ -151,8 +151,19 @@ export interface Project {
   repoProvider: 'github' | 'gitlab';
   defaultBranch: string;
   riskThreshold: number;
+  syncStatus?: 'pending' | 'syncing' | 'completed' | 'failed';
+  lastSyncedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  plan: string;
+  githubInstallationId?: number;
+  createdAt: string;
 }
 
 export interface Policy {
@@ -259,6 +270,20 @@ export const getPipelines = (organizationId: string, projectId?: string) => {
   return apiFetch<PipelineRun[]>(`/pipelines?${params}`);
 };
 
+// ─── Organizations endpoints ──────────────────────────────────────────────────
+
+export const getOrganization = (id: string) =>
+  apiFetch<Organization>(`/organizations/${id}`);
+
+export const createOrganization = (data: { name: string; slug: string }) =>
+  apiFetch<Organization>('/organizations', { method: 'POST', body: JSON.stringify(data) });
+
+export const updateOrganization = (id: string, data: Partial<Organization>) =>
+  apiFetch<Organization>(`/organizations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const completeOnboarding = () =>
+  apiFetch<{ success: boolean }>('/organizations/complete-onboarding', { method: 'POST' });
+
 export const getPipelineStats = (organizationId: string) =>
   apiFetch<PipelineStats>(`/pipelines/stats?organizationId=${organizationId}`);
 
@@ -299,6 +324,9 @@ export const getDeployments = (limit = 20) =>
 export const getDeploymentById = (id: string) =>
   apiFetch<Deployment>(`/deployments/${id}`);
 
+export const getDeploymentStats = () =>
+  apiFetch<DeploymentStats>('/deployments/stats');
+
 export const rollbackDeployment = (id: string, reason: string) =>
   apiFetch<Deployment>(`/deployments/${id}/rollback`, {
     method: 'POST',
@@ -312,14 +340,39 @@ export const getIncidents = (projectId?: string) => {
   return apiFetch<Incident[]>(`/monitoring/incidents${params}`);
 };
 
+export const getIncidentStats = () =>
+  apiFetch<IncidentStats>('/monitoring/incidents/stats');
+
 export const getIncidentRCA = (incidentId: string) =>
   apiFetch<RootCauseAnalysis>(`/monitoring/incidents/${incidentId}/rca`);
+
+export interface IncidentTimelineEvent {
+  id: string;
+  incidentId: string;
+  title: string;
+  description: string;
+  type: string;
+  timestamp: string;
+}
+
+export const getIncidentTimeline = (incidentId: string) =>
+  apiFetch<IncidentTimelineEvent[]>(`/monitoring/incidents/${incidentId}/timeline`);
+
+export const updateIncidentStatus = (incidentId: string, status: string) =>
+  apiFetch<Incident>(`/monitoring/incidents/${incidentId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
 
 export const getAnomalies = (deploymentId?: string, limit = 20) => {
   const params = new URLSearchParams({ limit: String(limit) });
   if (deploymentId) params.set('deploymentId', deploymentId);
   return apiFetch<AnomalyAlert[]>(`/monitoring/anomalies?${params}`);
 };
+
+export const getActiveAlerts = () =>
+  apiFetch<AnomalyAlert[]>('/monitoring/alerts/active');
+
 
 // ─── Projects endpoints ───────────────────────────────────────────────────────
 
@@ -329,11 +382,90 @@ export const getProjects = (organizationId: string) =>
 export const getProjectById = (id: string) =>
   apiFetch<Project>(`/projects/${id}`);
 
+export const getProjectSyncStatus = (id: string) =>
+  apiFetch<{ status: string; lastSyncedAt: string | null }>(`/projects/${id}/sync-status`);
+
 export const createProject = (data: Partial<Project>) =>
   apiFetch<Project>('/projects', { method: 'POST', body: JSON.stringify(data) });
 
 export const updateProject = (id: string, data: Partial<Project>) =>
   apiFetch<Project>(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export interface Commit {
+  id: string;
+  sha: string;
+  branch: string;
+  author: string;
+  message: string;
+  riskScore?: number;
+  riskLevel?: string;
+  analysisSummary?: string;
+  createdAt: string;
+}
+
+export interface PullRequest {
+  id: string;
+  number: number;
+  title: string;
+  state: string;
+  author: string;
+  url: string;
+  riskScore?: number;
+  riskLevel?: string;
+  analysisSummary?: string;
+  createdAt: string;
+  updatedAt: string;
+  mergedAt?: string | null;
+}
+
+export const getProjectCommits = (projectId: string) =>
+  apiFetch<Commit[]>(`/projects/${projectId}/commits`);
+
+export const getProjectPullRequests = (projectId: string) =>
+  apiFetch<PullRequest[]>(`/projects/${projectId}/pull-requests`);
+
+export interface GitHubRepo {
+  fullName: string;
+  name: string;
+  description: string;
+  defaultBranch: string;
+  private: boolean;
+  language: string;
+  stars: number;
+  updatedAt: string;
+}
+
+export const listGitHubRepos = () =>
+  apiFetch<GitHubRepo[]>('/projects/github/repos');
+
+export const listUserGitHubRepos = () =>
+  apiFetch<GitHubRepo[]>('/projects/github/user-repos');
+
+export const connectGitHubRepo = (data: {
+  organizationId: string;
+  repoFullName: string;
+  name: string;
+  defaultBranch?: string;
+}) =>
+  apiFetch<Project>('/projects/connect-github', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const listGitHubAppRepos = (installationId: number) =>
+  apiFetch<GitHubRepo[]>(`/projects/github/installations/${installationId}/repos`);
+
+export const connectGitHubAppRepo = (data: {
+  organizationId: string;
+  installationId: number;
+  repoFullName: string;
+  name: string;
+  defaultBranch?: string;
+}) =>
+  apiFetch<Project>('/projects/github/connect-app-repo', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 
 // ─── Policies endpoints ───────────────────────────────────────────────────────
 
@@ -348,6 +480,9 @@ export const updatePolicy = (id: string, data: Partial<Policy>) =>
 
 export const deletePolicy = (id: string) =>
   apiFetch<void>(`/policies/${id}`, { method: 'DELETE' });
+
+export const togglePolicy = (id: string) =>
+  apiFetch<Policy>(`/policies/${id}/toggle`, { method: 'PATCH' });
 
 // ─── Governance endpoints ─────────────────────────────────────────────────────
 
@@ -380,8 +515,11 @@ export const rejectRequest = (id: string, reason: string) =>
 
 // ─── Analytics endpoints ──────────────────────────────────────────────────────
 
-export const getDoraMetrics = (organizationId: string, days = 30) =>
-  apiFetch<DoraMetrics>(`/analytics/dora?organizationId=${organizationId}&days=${days}`);
+export const getDoraMetrics = (organizationId: string, days = 30, projectId?: string) => {
+  const params = new URLSearchParams({ organizationId, days: String(days) });
+  if (projectId) params.set('projectId', projectId);
+  return apiFetch<DoraMetrics>(`/analytics/dora?${params}`);
+};
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 

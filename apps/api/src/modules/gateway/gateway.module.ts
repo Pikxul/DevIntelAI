@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { WebSocketGateway, WebSocketServer, SubscribeMessage, MessageBody, OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Inject, forwardRef } from '@nestjs/common';
 import { PipelinesService } from '../pipelines/pipelines.service';
 import { AIReviewService } from '../ai-review/ai-review.service';
 import { JwtService } from '@nestjs/jwt';
@@ -19,11 +19,12 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
   private interval: NodeJS.Timeout;
 
   constructor(
+    @Inject(forwardRef(() => PipelinesService))
     private readonly pipelinesService: PipelinesService,
     private readonly aiReviewService: AIReviewService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   onModuleInit() {
     // Broadcast stats every 30 seconds
@@ -32,7 +33,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
         // Just broadcast stats for 'default-org' for now (or loop active orgs)
         const pipelineStats = await this.pipelinesService.getStats('default-org');
         const aiStats = await this.aiReviewService.getReviewStats();
-        
+
         this.server.emit('dashboard:stats', { pipelineStats, aiStats });
       } catch (err) {
         this.logger.error(`Failed to broadcast stats: ${err.message}`);
@@ -50,10 +51,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
       if (!token) {
         throw new Error('No token provided');
       }
-      
+
       const secret = this.configService.get<string>('NEXTAUTH_SECRET') || this.configService.get<string>('JWT_SECRET');
       const payload = this.jwtService.verify(token, { secret });
-      
+
       this.logger.log(`Client connected: ${client.id} (User: ${payload.email})`);
     } catch (err) {
       this.logger.warn(`Unauthorized client connection attempt: ${client.id}`);
@@ -97,11 +98,11 @@ import { JwtModule } from '@nestjs/jwt';
 
 @Module({
   imports: [
-    PipelinesModule,
+    forwardRef(() => PipelinesModule),
     AIReviewModule,
     JwtModule.register({}),
   ],
   providers: [EventsGateway],
   exports: [EventsGateway],
 })
-export class GatewayModule {}
+export class GatewayModule { }

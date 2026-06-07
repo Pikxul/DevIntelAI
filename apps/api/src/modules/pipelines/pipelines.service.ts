@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
@@ -6,6 +6,7 @@ import { Queue } from 'bull';
 import { PipelineRun } from '../../entities';
 import type { PipelineStage, PipelineStageName, StageStatus } from '@aidevops/shared-types';
 import { v4 as uuid } from 'uuid';
+import { EventsGateway } from '../gateway/gateway.module';
 
 export interface CreatePipelineRunDto {
   projectId: string;
@@ -30,6 +31,7 @@ export class PipelinesService {
   constructor(
     @InjectRepository(PipelineRun) private repo: Repository<PipelineRun>,
     @InjectQueue('pipeline') private pipelineQueue: Queue,
+    @Inject(forwardRef(() => EventsGateway)) private readonly eventsGateway: EventsGateway,
   ) {}
 
   async create(dto: CreatePipelineRunDto): Promise<PipelineRun> {
@@ -46,6 +48,13 @@ export class PipelinesService {
       triggeredBy: dto.triggeredBy ?? 'push',
     });
     const saved = await this.repo.save(run);
+
+    // Broadcast new pipeline run started
+    try {
+      this.eventsGateway.emitGlobalEvent('pipeline:started', saved);
+    } catch (err) {
+      // Ignore websocket failures gracefully
+    }
 
     // Enqueue for full CI/CD processing
     await this.pipelineQueue.add(
@@ -108,10 +117,38 @@ export class PipelinesService {
     run.stages = stages as unknown as object[];
     if (allDone) run.completedAt = new Date();
     await this.repo.save(run);
+
+    // Broadcast stage update
+    try {
+      this.eventsGateway.emitPipelineUpdate(pipelineRunId, {
+        pipelineRunId,
+        stageId: stage?.id || '',
+        stageName,
+        status,
+        log,
+      });
+      // Also broadcast global dashboard update
+      const pipelineStats = await this.getStats(run.organizationId);
+      this.eventsGateway.emitGlobalEvent('dashboard:stats:update', { pipelineStats });
+    } catch (err) {
+      // Ignore websocket failures gracefully
+    }
   }
 
   async updateStatus(id: string, status: StageStatus): Promise<void> {
+    const run = await this.repo.findOne({ where: { id } });
     await this.repo.update(id, { status, ...(status === 'success' || status === 'failed' ? { completedAt: new Date() } : {}) });
+    
+    // Broadcast status update
+    try {
+      this.eventsGateway.emitPipelineUpdate(id, { pipelineRunId: id, status });
+      if (run) {
+        const pipelineStats = await this.getStats(run.organizationId);
+        this.eventsGateway.emitGlobalEvent('dashboard:stats:update', { pipelineStats });
+      }
+    } catch (err) {
+      // Ignore websocket failures gracefully
+    }
   }
 
   async getStats(organizationId: string) {

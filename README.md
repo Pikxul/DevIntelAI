@@ -172,13 +172,27 @@ Every `git push` or pull request automatically triggers:
 
 ---
 
-## 📡 GitHub Webhook Setup
+## 🧪 Local Sandbox & Webhook Simulation
 
-1. Go to your repo → **Settings → Webhooks → Add webhook**
-2. Payload URL: `https://your-api.com/api/v1/webhooks/github?projectId=<id>&orgId=<id>`
-3. Content-Type: `application/json`
-4. Secret: value of `GITHUB_WEBHOOK_SECRET`
-5. Events: `push`, `pull_request`
+You can test the entire E2E flow of **Login → Connect Repository → Webhook → AI Review → Result** locally in under 10 seconds without needing complex GitHub setups or internet tunneling!
+
+### 1. Enable Local Development Webhook Signature Bypass
+Open your root `.env` or `apps/web/.env` and ensure this is set to `true`:
+```env
+GITHUB_WEBHOOK_SKIP_VALIDATION=true
+```
+
+### 2. Trigger the Mock Webhook Simulation
+With your development servers running (`pnpm dev`), execute this command in a new terminal:
+```bash
+# Run simulation from root workspace
+powershell -ExecutionPolicy Bypass -Command "pnpm webhook:simulate"
+```
+
+This sends an authentic mock GitHub payload containing a realistic commit and vulnerability diff directly to your running NestJS server.
+
+### 3. See the Real-Time Results
+Open the web dashboard: [http://localhost:3000/dashboard/pipelines](http://localhost:3000/dashboard/pipelines). You will see the incoming `feature/auth-sandbox` pipeline start, transition through the AI Code Review, perform security scanning, and finish in real-time!
 
 ---
 

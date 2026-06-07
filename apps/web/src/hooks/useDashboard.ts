@@ -1,6 +1,6 @@
 'use client';
 import useSWR from 'swr';
-import { getPipelineStats, getAIReviewStats, getPipelines, PipelineStats, AIReviewStats, PipelineRun } from '@/lib/api';
+import { getPipelineStats, getAIReviewStats, getPipelines, getActiveAlerts, PipelineStats, AIReviewStats, PipelineRun, AnomalyAlert } from '@/lib/api';
 
 const ORG_ID = 'default-org'; // TODO: get from session once multi-tenancy is added
 
@@ -10,7 +10,7 @@ export function usePipelineStats() {
   const { data, error, isLoading, mutate } = useSWR<PipelineStats>(
     'pipeline-stats',
     () => getPipelineStats(ORG_ID),
-    { refreshInterval: 15_000 },
+    { revalidateOnFocus: false },
   );
   return { stats: data, error, isLoading, refresh: mutate };
 }
@@ -21,7 +21,7 @@ export function useAIReviewStats() {
   const { data, error, isLoading } = useSWR<AIReviewStats>(
     'ai-review-stats',
     () => getAIReviewStats(),
-    { refreshInterval: 30_000 },
+    { revalidateOnFocus: false },
   );
   return { stats: data, error, isLoading };
 }
@@ -32,7 +32,7 @@ export function useRecentPipelines() {
   const { data, error, isLoading, mutate } = useSWR<PipelineRun[]>(
     'recent-pipelines',
     () => getPipelines(ORG_ID),
-    { refreshInterval: 10_000 },
+    { revalidateOnFocus: false },
   );
   return { pipelines: data ?? [], error, isLoading, refresh: mutate };
 }
@@ -63,4 +63,15 @@ export function usePipelineChartData() {
   });
 
   return buckets;
+}
+
+// ─── Active Anomaly Alerts ───────────────────────────────────────────────────
+
+export function useActiveAlerts() {
+  const { data, error, isLoading, mutate } = useSWR<AnomalyAlert[]>(
+    'active-alerts',
+    () => getActiveAlerts(),
+    { revalidateOnFocus: false },
+  );
+  return { alerts: data ?? [], error, isLoading, refresh: mutate };
 }

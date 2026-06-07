@@ -3,11 +3,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 import { GovernanceService } from './governance.service';
 import { GovernanceController } from './governance.controller';
-import { User, Organization, ApprovalRequestEntity, AuditLogEntity } from '../../entities';
+import { User, Organization, ApprovalRequestEntity, AuditLogEntity, AuditArchiveLog } from '../../entities';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Organization, ApprovalRequestEntity, AuditLogEntity]),
+    TypeOrmModule.forFeature([User, Organization, ApprovalRequestEntity, AuditLogEntity, AuditArchiveLog]),
     BullModule.registerQueue({ name: 'pipeline' }),
   ],
   controllers: [GovernanceController],

@@ -1,20 +1,24 @@
 'use client';
 import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
-import { getTeamMembers, getAuditLogs, getApprovalRequests, updateMemberRole, approveRequest, rejectRequest, TeamMember, AuditLog, ApprovalRequest } from '@/lib/api';
-import { Building2, Crown, Shield, Code2, Eye, Users, Lock, FileText, Check, X, Clock, AlertTriangle } from 'lucide-react';
+import { getTeamMembers, getAuditLogs, getApprovalRequests, updateMemberRole, approveRequest, rejectRequest, TeamMember, AuditLog, ApprovalRequest, getToken } from '@/lib/api';
+import { Building2, Crown, Shield, Code2, Eye, Users, Lock, FileText, Check, X, Clock, AlertTriangle, Download, FileDown } from 'lucide-react';
 
 const DEFAULT_ORG = 'default-org';
 
-const roles: TeamMember['role'][] = ['admin', 'developer', 'viewer', 'security_engineer'];
+const roles = ['owner', 'admin', 'manager', 'security_engineer', 'developer', 'viewer'];
 const roleColors: Record<string, string> = {
+  owner: 'badge-danger',
   admin: 'badge-danger',
-  security_engineer: 'badge-warning',
+  manager: 'badge-warning',
+  security_engineer: 'badge-info',
   developer: 'badge-info',
   viewer: 'badge-neutral',
 };
-const roleIcons = {
+const roleIcons: Record<string, React.ReactNode> = {
+  owner: <Crown size={12} className="inline mr-1" />,
   admin: <Crown size={12} className="inline mr-1" />,
+  manager: <Shield size={12} className="inline mr-1" />,
   security_engineer: <Shield size={12} className="inline mr-1" />,
   developer: <Code2 size={12} className="inline mr-1" />,
   viewer: <Eye size={12} className="inline mr-1" />,
@@ -52,10 +56,10 @@ function MembersTab() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const handleRoleChange = async (memberId: string, newRole: TeamMember['role']) => {
+  const handleRoleChange = async (memberId: string, newRole: any) => {
     setUpdatingId(memberId);
     try {
-      const updated = await updateMemberRole(memberId, newRole);
+      const updated = await updateMemberRole(memberId, newRole as any);
       setMembers(prev => prev.map(m => m.id === memberId ? updated : m));
     } catch (err: any) {
       alert(`Failed: ${err.message}`);
@@ -139,6 +143,7 @@ function AuditTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     getAuditLogs(DEFAULT_ORG, 100)
@@ -146,6 +151,31 @@ function AuditTab() {
       .catch(e => setError(e.message))
       .finally(() => setIsLoading(false));
   }, []);
+
+  const handleExport = async (format: 'csv' | 'json') => {
+    setIsExporting(true);
+    try {
+      const token = await getToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+      const res = await fetch(`${API_URL}/api/v1/governance/audit-logs/export?organizationId=${DEFAULT_ORG}&format=${format}`, {
+        headers,
+      });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-logs-${DEFAULT_ORG}-${Date.now()}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err: any) {
+      alert(`Export failed: ${err.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const filtered = logs.filter(l =>
     l.action.toLowerCase().includes(filter.toLowerCase()) ||
@@ -158,17 +188,37 @@ function AuditTab() {
 
   return (
     <div>
-      <input
-        type="text"
-        placeholder="Filter by action, resource, or user…"
-        value={filter}
-        onChange={e => setFilter(e.target.value)}
-        style={{
-          width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
-          padding: '0.5rem 0.875rem', fontSize: '0.875rem', outline: 'none', marginBottom: '1rem',
-        }}
-      />
+      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1.25rem' }}>
+        <input
+          type="text"
+          placeholder="Filter by action, resource, or user…"
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          style={{
+            flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
+            padding: '0.5rem 0.875rem', fontSize: '0.875rem', outline: 'none',
+          }}
+        />
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            className="btn btn-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8125rem', padding: '0.5rem 0.875rem' }}
+            onClick={() => handleExport('csv')}
+            disabled={isExporting}
+          >
+            <Download size={14} /> Export CSV
+          </button>
+          <button
+            className="btn btn-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8125rem', padding: '0.5rem 0.875rem' }}
+            onClick={() => handleExport('json')}
+            disabled={isExporting}
+          >
+            <FileDown size={14} /> Export JSON
+          </button>
+        </div>
+      </div>
       {filtered.length === 0 ? (
         <div style={{ padding: '3rem', textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
