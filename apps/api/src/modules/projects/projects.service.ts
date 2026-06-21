@@ -40,22 +40,22 @@ export class ProjectsService {
     return this.repo.find({ where: { organizationId }, order: { createdAt: 'DESC' } });
   }
 
-  async findOne(id: string): Promise<Project | null> {
-    return this.repo.findOne({ where: { id } });
+  async findOne(id: string, organizationId: string): Promise<Project | null> {
+    return this.repo.findOne({ where: { id, organizationId } });
   }
 
-  async findByGithubRepo(fullName: string): Promise<Project | null> {
-    return this.repo.findOne({ where: { githubRepoFullName: fullName } });
+  async findByGithubRepo(fullName: string, organizationId: string): Promise<Project | null> {
+    return this.repo.findOne({ where: { githubRepoFullName: fullName, organizationId } });
   }
 
   /** Used by the GitLab webhook controller to match a repo by its web URL. */
-  async findByRepoUrl(repoUrl: string): Promise<Project | null> {
-    return this.repo.findOne({ where: { repoUrl } });
+  async findByRepoUrl(repoUrl: string, organizationId: string): Promise<Project | null> {
+    return this.repo.findOne({ where: { repoUrl, organizationId } });
   }
 
-  async update(id: string, data: Partial<Project>): Promise<Project | null> {
-    await this.repo.update(id, data);
-    return this.findOne(id);
+  async update(id: string, data: Partial<Project>, organizationId: string): Promise<Project | null> {
+    await this.repo.update({ id, organizationId }, data);
+    return this.findOne(id, organizationId);
   }
 
   /**
@@ -349,17 +349,17 @@ export class ProjectsService {
   }
 }
 
-  async getSyncStatus(projectId: string): Promise<{ status: string; lastSyncedAt: Date | null }> {
-    const project = await this.repo.findOne({ where: { id: projectId }, select: ['syncStatus', 'lastSyncedAt'] });
+  async getSyncStatus(projectId: string, organizationId: string): Promise<{ status: string; lastSyncedAt: Date | null }> {
+    const project = await this.repo.findOne({ where: { id: projectId, organizationId }, select: ['syncStatus', 'lastSyncedAt'] });
     if (!project) throw new Error('Project not found');
     return { status: project.syncStatus, lastSyncedAt: project.lastSyncedAt };
   }
 
-  async findCommits(projectId: string): Promise<CommitEntity[]> {
-    return this.commitRepo.find({ where: { projectId }, order: { createdAt: 'DESC' }, take: 100 });
+  async findCommits(projectId: string, organizationId: string): Promise<CommitEntity[]> {
+    return this.commitRepo.find({ where: { projectId, organizationId }, order: { createdAt: 'DESC' }, take: 100 });
   }
 
-  async findPullRequests(projectId: string): Promise<PullRequestEntity[]> {
-    return this.prRepo.find({ where: { projectId }, order: { createdAt: 'DESC' }, take: 100 });
+  async findPullRequests(projectId: string, organizationId: string): Promise<PullRequestEntity[]> {
+    return this.prRepo.find({ where: { projectId, organizationId }, order: { createdAt: 'DESC' }, take: 100 });
   }
 }

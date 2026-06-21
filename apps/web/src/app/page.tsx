@@ -48,7 +48,7 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center gap-3">
             <Link href="/dashboard" className="btn btn-secondary btn-sm" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>Dashboard</Link>
-            <Link href="/dashboard" className="btn btn-primary btn-sm">Get Started</Link>
+            <Link href="/auth/signin" className="btn btn-primary btn-sm">Get Started</Link>
           </div>
         </div>
       </nav>
@@ -67,8 +67,8 @@ export default function LandingPage() {
               The world's first DevOps platform with built-in AI code review, risk scoring, and production anomaly detection — from push to deploy.
             </p>
             <div className="flex items-center gap-3" style={{ justifyContent: 'center' }}>
-              <Link href="/dashboard" className="btn btn-primary btn-lg" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', boxShadow: '0 8px 30px rgba(139, 92, 246, 0.3)' }}>
-                <Zap size={18} className="animate-pulse" /> Launch Dashboard
+              <Link href="/auth/signin" className="btn btn-primary btn-lg" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', boxShadow: '0 8px 30px rgba(139, 92, 246, 0.3)' }}>
+                <Zap size={18} className="animate-pulse" /> Get Started Free
               </Link>
               <a href="https://github.com" className="btn btn-secondary btn-lg" target="_blank" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', border: '1px solid rgba(255,255,255,0.1)' }}>
                 <Star size={18} className="text-yellow-400" /> GitHub
@@ -191,8 +191,8 @@ export default function LandingPage() {
           <div className="card card-glow" style={{ padding: '5rem 2rem', background: 'radial-gradient(ellipse at center, rgba(139, 92, 246, 0.15) 0%, rgba(30, 32, 36, 0.5) 100%)', border: '1px solid rgba(139, 92, 246, 0.25)', boxShadow: 'var(--shadow-glow)', textAlign: 'center' }}>
             <h2 style={{ marginBottom: '1rem', fontSize: '2.5rem', fontWeight: 800, letterSpacing: '-0.03em' }}>Ready to ship faster?</h2>
             <p style={{ marginBottom: '3rem', fontSize: '1.125rem', color: 'var(--text-secondary)', maxWidth: '600px', margin: '0 auto 3rem' }}>Set up your AI DevOps pipeline in under 5 minutes.</p>
-            <Link href="/dashboard" className="btn btn-primary btn-lg" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', margin: '0 auto', boxShadow: '0 8px 30px rgba(139, 92, 246, 0.4)' }}>
-              <Rocket size={18} className="animate-bounce" /> Open Dashboard
+            <Link href="/auth/signin" className="btn btn-primary btn-lg" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', margin: '0 auto', boxShadow: '0 8px 30px rgba(139, 92, 246, 0.4)' }}>
+              <Rocket size={18} className="animate-bounce" /> Start for Free
             </Link>
           </div>
         </div>

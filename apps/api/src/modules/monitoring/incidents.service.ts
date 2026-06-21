@@ -40,8 +40,18 @@ export class IncidentsService {
 
     // Emit live WebSocket update
     try {
-      this.eventsGateway.emitGlobalEvent(`incident:${incidentId}:timeline`, saved);
-      this.eventsGateway.emitGlobalEvent('incident:timeline:update', { incidentId, event: saved });
+      let orgId = 'default-org';
+      const res = await this.incidentRepo.createQueryBuilder('i')
+        .innerJoin('projects', 'p', 'i.projectId = p.id')
+        .where('i.id = :incidentId', { incidentId })
+        .select('p.organizationId', 'orgId')
+        .getRawOne();
+      if (res && res.orgId) {
+        orgId = res.orgId;
+      }
+
+      this.eventsGateway.emitGlobalEvent(orgId, `incident:${incidentId}:timeline`, saved);
+      this.eventsGateway.emitGlobalEvent(orgId, 'incident:timeline:update', { incidentId, event: saved });
     } catch (err) {
       this.logger.warn(`Failed to emit timeline live update: ${err.message}`);
     }
@@ -49,11 +59,14 @@ export class IncidentsService {
     return saved;
   }
 
-  async getTimeline(incidentId: string): Promise<IncidentTimelineEntity[]> {
-    return this.timelineRepo.find({
-      where: { incidentId },
-      order: { timestamp: 'ASC' },
-    });
+  async getTimeline(incidentId: string, organizationId: string): Promise<IncidentTimelineEntity[]> {
+    return this.timelineRepo.createQueryBuilder('t')
+      .innerJoin('incident_alerts', 'i', 't.incidentId = i.id')
+      .innerJoin('projects', 'p', 'i.projectId = p.id')
+      .where('t.incidentId = :incidentId', { incidentId })
+      .andWhere('p.organizationId = :organizationId', { organizationId })
+      .orderBy('t.timestamp', 'ASC')
+      .getMany();
   }
 
   // ─── Webhook Handling & Correlation ──────────────────────────────────────────
@@ -96,8 +109,19 @@ export class IncidentsService {
     );
 
     // Emit live WebSocket event
+    let projectOrgId = 'default-org';
     try {
-      this.eventsGateway.emitGlobalEvent('incident:created', savedIncident);
+      if (savedIncident.projectId && savedIncident.projectId !== 'unknown') {
+        const res = await this.incidentRepo.createQueryBuilder('i')
+          .innerJoin('projects', 'p', 'i.projectId = p.id')
+          .select('p.organizationId', 'orgId')
+          .where('i.id = :id', { id: savedIncident.id })
+          .getRawOne();
+        if (res && res.orgId) {
+          projectOrgId = res.orgId;
+        }
+      }
+      this.eventsGateway.emitGlobalEvent(projectOrgId, 'incident:created', savedIncident);
     } catch (err) {
       this.logger.warn(`Failed to emit incident:created: ${err.message}`);
     }
@@ -148,7 +172,8 @@ export class IncidentsService {
       try {
         const rollbackResult = await this.deploymentsService.rollback(
           savedIncident.deploymentId,
-          'Auto-rollback triggered by critical incident'
+          'Auto-rollback triggered by critical incident',
+          projectOrgId
         );
         
         if (rollbackResult) {
@@ -192,17 +217,31 @@ export class IncidentsService {
     };
   }
 
-  async getIncidents(projectId?: string): Promise<IncidentAlertEntity[]> {
-    const where = projectId ? { projectId } : {};
-    return this.incidentRepo.find({ where, order: { timestamp: 'DESC' } });
+  async getIncidents(organizationId: string, projectId?: string): Promise<IncidentAlertEntity[]> {
+    const qb = this.incidentRepo.createQueryBuilder('i')
+      .innerJoin('projects', 'p', 'i.projectId = p.id')
+      .where('p.organizationId = :organizationId', { organizationId });
+    if (projectId) {
+      qb.andWhere('i.projectId = :projectId', { projectId });
+    }
+    return qb.orderBy('i.timestamp', 'DESC').getMany();
   }
 
-  async getRCA(incidentId: string): Promise<RootCauseAnalysisEntity | null> {
-    return this.rcaRepo.findOne({ where: { incidentId } });
+  async getRCA(incidentId: string, organizationId: string): Promise<RootCauseAnalysisEntity | null> {
+    return this.rcaRepo.createQueryBuilder('rca')
+      .innerJoin('incident_alerts', 'i', 'rca.incidentId = i.id')
+      .innerJoin('projects', 'p', 'i.projectId = p.id')
+      .where('rca.incidentId = :incidentId', { incidentId })
+      .andWhere('p.organizationId = :organizationId', { organizationId })
+      .getOne();
   }
 
-  async updateStatus(incidentId: string, status: string): Promise<IncidentAlertEntity | null> {
-    const incident = await this.incidentRepo.findOne({ where: { id: incidentId } });
+  async updateStatus(incidentId: string, status: string, organizationId: string): Promise<IncidentAlertEntity | null> {
+    const incident = await this.incidentRepo.createQueryBuilder('i')
+      .innerJoin('projects', 'p', 'i.projectId = p.id')
+      .where('i.id = :incidentId', { incidentId })
+      .andWhere('p.organizationId = :organizationId', { organizationId })
+      .getOne();
     if (!incident) return null;
     
     const oldStatus = incident.status;
@@ -231,7 +270,7 @@ export class IncidentsService {
 
     // Emit live WebSocket event
     try {
-      this.eventsGateway.emitGlobalEvent('incident:resolved', finalSaved);
+      this.eventsGateway.emitGlobalEvent(organizationId, 'incident:resolved', finalSaved);
     } catch (err) {
       this.logger.warn(`Failed to emit incident:resolved: ${err.message}`);
     }
@@ -239,8 +278,13 @@ export class IncidentsService {
     return finalSaved;
   }
 
-  async getStats() {
-    const incidents = await this.incidentRepo.find({ take: 200, order: { timestamp: 'DESC' } });
+  async getStats(organizationId: string) {
+    const incidents = await this.incidentRepo.createQueryBuilder('i')
+      .innerJoin('projects', 'p', 'i.projectId = p.id')
+      .where('p.organizationId = :organizationId', { organizationId })
+      .orderBy('i.timestamp', 'DESC')
+      .take(200)
+      .getMany();
     const total = incidents.length;
     const active = incidents.filter(i => i.status !== 'resolved').length;
     const resolved = incidents.filter(i => i.status === 'resolved').length;
@@ -258,8 +302,18 @@ export class IncidentsService {
     const avgMttrMinutes = Math.round(avgMttrMs / 60000);
     const avgMttr = avgMttrMinutes > 0 ? `${avgMttrMinutes}m` : 'N/A';
 
-    const rcaCount = await this.rcaRepo.count();
-    const autoRollbacks = await this.rollbackRepo.count({ where: { triggeredBy: 'auto' } });
+    const rcaCount = await this.rcaRepo.createQueryBuilder('rca')
+      .innerJoin('incident_alerts', 'i', 'rca.incidentId = i.id')
+      .innerJoin('projects', 'p', 'i.projectId = p.id')
+      .where('p.organizationId = :organizationId', { organizationId })
+      .getCount();
+
+    const autoRollbacks = await this.rollbackRepo.createQueryBuilder('r')
+      .innerJoin('incident_alerts', 'i', 'r.incidentId = i.id')
+      .innerJoin('projects', 'p', 'i.projectId = p.id')
+      .where('p.organizationId = :organizationId', { organizationId })
+      .andWhere('r.triggeredBy = :auto', { auto: 'auto' })
+      .getCount();
 
     return { total, active, resolved, avgMttr, rcaGenerated: rcaCount, autoRollbacks };
   }

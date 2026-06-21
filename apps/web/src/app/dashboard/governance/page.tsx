@@ -3,8 +3,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import { getTeamMembers, getAuditLogs, getApprovalRequests, updateMemberRole, approveRequest, rejectRequest, TeamMember, AuditLog, ApprovalRequest, getToken } from '@/lib/api';
 import { Building2, Crown, Shield, Code2, Eye, Users, Lock, FileText, Check, X, Clock, AlertTriangle, Download, FileDown } from 'lucide-react';
-
-const DEFAULT_ORG = 'default-org';
+import { useOrganizationId } from '@/hooks/useOrganizationId';
 
 const roles = ['owner', 'admin', 'manager', 'security_engineer', 'developer', 'viewer'];
 const roleColors: Record<string, string> = {
@@ -44,17 +43,18 @@ function TabButton({ id, active, children, onClick }: { id: TabId; active: boole
 }
 
 function MembersTab() {
+  const orgId = useOrganizationId();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
-    getTeamMembers(DEFAULT_ORG)
+    getTeamMembers(orgId)
       .then(setMembers)
       .catch(e => setError(e.message))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [orgId]);
 
   const handleRoleChange = async (memberId: string, newRole: any) => {
     setUpdatingId(memberId);
@@ -139,6 +139,7 @@ function MembersTab() {
 }
 
 function AuditTab() {
+  const orgId = useOrganizationId();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,11 +147,11 @@ function AuditTab() {
   const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
-    getAuditLogs(DEFAULT_ORG, 100)
+    getAuditLogs(orgId, 100)
       .then(setLogs)
       .catch(e => setError(e.message))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [orgId]);
 
   const handleExport = async (format: 'csv' | 'json') => {
     setIsExporting(true);
@@ -158,7 +159,7 @@ function AuditTab() {
       const token = await getToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-      const res = await fetch(`${API_URL}/api/v1/governance/audit-logs/export?organizationId=${DEFAULT_ORG}&format=${format}`, {
+      const res = await fetch(`${API_URL}/api/v1/governance/audit-logs/export?organizationId=${orgId}&format=${format}`, {
         headers,
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
@@ -166,7 +167,7 @@ function AuditTab() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `audit-logs-${DEFAULT_ORG}-${Date.now()}.${format}`;
+      a.download = `audit-logs-${orgId}-${Date.now()}.${format}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -264,6 +265,7 @@ function AuditTab() {
 }
 
 function ApprovalsTab() {
+  const orgId = useOrganizationId();
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -271,14 +273,14 @@ function ApprovalsTab() {
 
   const fetchRequests = useCallback(async () => {
     try {
-      const data = await getApprovalRequests(DEFAULT_ORG);
+      const data = await getApprovalRequests(orgId);
       setRequests(data);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [orgId]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 

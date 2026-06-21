@@ -64,10 +64,11 @@ describe('AuthController', () => {
     };
 
     it('creates a new user when they do not exist', async () => {
-      const mockOrg = { id: 'default-org', name: 'Default Organization', slug: 'default-org' };
-      const mockUser = { ...githubBody, id: 'user-uuid', organizationId: 'default-org', role: 'admin', provider: 'github' };
+      const mockOrg = { id: 'new-org-id', name: 'Test User\'s Organization', slug: 'org-slug' };
+      const mockUser = { ...githubBody, id: 'user-uuid', organizationId: 'new-org-id', role: 'admin', provider: 'github' };
 
-      orgRepo.findOne.mockResolvedValue(mockOrg);
+      orgRepo.create.mockReturnValue(mockOrg);
+      orgRepo.save.mockResolvedValue(mockOrg);
       userRepo.findOne.mockResolvedValue(null); // user doesn't exist
       userRepo.create.mockReturnValue(mockUser);
       userRepo.save.mockResolvedValue(mockUser);
@@ -79,6 +80,7 @@ describe('AuthController', () => {
           email: 'user@example.com',
           githubId: 'gh-123',
           provider: 'github',
+          organizationId: 'new-org-id',
         }),
       );
       expect(result.token).toBe('mocked-jwt-token');
@@ -86,7 +88,6 @@ describe('AuthController', () => {
     });
 
     it('returns existing user and generates JWT without duplicating', async () => {
-      const mockOrg = { id: 'default-org', name: 'Default Organization', slug: 'default-org' };
       const existingUser = {
         id: 'existing-uuid',
         email: 'user@example.com',
@@ -94,11 +95,10 @@ describe('AuthController', () => {
         githubId: 'gh-123',
         githubUsername: 'testuser',
         avatarUrl: 'https://github.com/avatar.png',
-        organizationId: 'default-org',
+        organizationId: 'existing-org',
         role: 'admin',
       };
 
-      orgRepo.findOne.mockResolvedValue(mockOrg);
       userRepo.findOne.mockResolvedValue(existingUser);
       userRepo.save.mockResolvedValue(existingUser);
 
@@ -108,35 +108,15 @@ describe('AuthController', () => {
       expect(result.token).toBe('mocked-jwt-token');
     });
 
-    it('creates the default org if it does not exist', async () => {
-      const newOrg = { id: 'default-org', name: 'Default Organization', slug: 'default-org' };
-      const newUser = { id: 'user-uuid', email: 'user@example.com', organizationId: 'default-org', role: 'admin' };
-
-      orgRepo.findOne.mockResolvedValue(null); // org doesn't exist
-      orgRepo.create.mockReturnValue(newOrg);
-      orgRepo.save.mockResolvedValue(newOrg);
-      userRepo.findOne.mockResolvedValue(null);
-      userRepo.create.mockReturnValue(newUser);
-      userRepo.save.mockResolvedValue(newUser);
-
-      await controller.githubCallback(githubBody);
-
-      expect(orgRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ slug: 'default-org' }),
-      );
-    });
-
     it('signs a JWT with correct payload fields', async () => {
-      const mockOrg = { id: 'default-org' };
       const mockUser = {
         id: 'user-uuid',
         email: 'user@example.com',
         name: 'Test User',
-        organizationId: 'default-org',
+        organizationId: 'existing-org',
         role: 'admin',
       };
 
-      orgRepo.findOne.mockResolvedValue(mockOrg);
       userRepo.findOne.mockResolvedValue(mockUser);
       userRepo.save.mockResolvedValue(mockUser);
 
@@ -146,7 +126,7 @@ describe('AuthController', () => {
         expect.objectContaining({
           sub: 'user-uuid',
           email: 'user@example.com',
-          org: 'default-org',
+          org: 'existing-org',
           role: 'admin',
         }),
       );
@@ -223,4 +203,3 @@ describe('AuthController', () => {
     });
   });
 });
-

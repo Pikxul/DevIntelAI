@@ -1,11 +1,13 @@
 'use client';
 import { useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { AlertCircle, Building2, CheckCircle2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { AlertCircle, Building2, CheckCircle2, ArrowRight } from 'lucide-react';
 import { createOrganization, type Organization } from '@/lib/api';
 
 export default function CreateOrganizationPage() {
   const { update } = useSession();
+  const router = useRouter();
   const [orgName, setOrgName] = useState('');
   const [slug, setSlug] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,12 +29,12 @@ export default function CreateOrganizationPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
+
     if (!orgName || !slug) {
       setError('Please fill in both fields');
       return;
     }
-    
+
     setLoading(true);
     try {
       const newOrg = await createOrganization({ name: orgName, slug });
@@ -47,26 +49,40 @@ export default function CreateOrganizationPage() {
 
   if (organization) {
     return (
-      <div className="flex-1 flex items-center justify-center p-6 relative overflow-hidden">
-        <div className="w-full max-w-md bg-surface border border-border/50 p-8 rounded-2xl shadow-2xl relative z-10 backdrop-blur-xl">
-          <div className="flex items-center gap-4 mb-8">
-            <div className="w-12 h-12 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-              <CheckCircle2 className="text-emerald-400" size={26} />
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', position: 'relative', overflow: 'hidden', minHeight: '100vh' }}>
+        {/* Background glow */}
+        <div style={{ position: 'absolute', top: '-10%', left: '-10%', width: '40%', height: '40%', borderRadius: '50%', background: 'rgba(139,92,246,0.08)', filter: 'blur(120px)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: '-10%', right: '-10%', width: '40%', height: '40%', borderRadius: '50%', background: 'rgba(16,185,129,0.08)', filter: 'blur(120px)', pointerEvents: 'none' }} />
+
+        <div style={{ width: '100%', maxWidth: '440px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.08)', padding: '2.5rem', borderRadius: '1.25rem', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', position: 'relative', zIndex: 10, backdropFilter: 'blur(20px)' }}>
+          {/* Success header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(16,185,129,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <CheckCircle2 color="#10b981" size={26} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-100">Organization created</h1>
-              <p className="text-muted-foreground text-sm">{organization.name}</p>
+              <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#e2e2e8', marginBottom: '0.125rem' }}>Organization created!</h1>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{organization.name}</p>
             </div>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-surface-hover px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.08em] text-gray-500 mb-1">Workspace</p>
-            <p className="text-gray-100 font-medium break-words">devintel.ai/{organization.slug}</p>
+          <div style={{ borderRadius: '0.75rem', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', padding: '0.875rem 1rem', marginBottom: '2rem' }}>
+            <p style={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: '0.25rem', fontWeight: 600 }}>Workspace</p>
+            <p style={{ color: '#e2e2e8', fontWeight: 600, wordBreak: 'break-all' }}>devintel.ai/{organization.slug}</p>
           </div>
 
-          <div className="mt-8 flex justify-center items-center gap-2">
-            <div className="h-2 w-8 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"></div>
-            <div className="h-2 w-2 rounded-full bg-gray-700"></div>
+          {/* Continue button */}
+          <button
+            onClick={() => router.push('/onboarding/install-app')}
+            style={{ width: '100%', background: 'var(--gradient-brand)', color: 'white', fontWeight: 600, borderRadius: '0.75rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', border: 'none', cursor: 'pointer', fontSize: '0.9375rem', boxShadow: '0 8px 24px rgba(139,92,246,0.25)' }}
+          >
+            Continue <ArrowRight size={18} />
+          </button>
+
+          {/* Stepper */}
+          <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ height: '6px', width: '32px', borderRadius: '100px', background: '#6366f1', boxShadow: '0 0 8px rgba(99,102,241,0.5)' }} />
+            <div style={{ height: '6px', width: '8px', borderRadius: '100px', background: 'rgba(255,255,255,0.1)' }} />
           </div>
         </div>
       </div>
@@ -74,54 +90,59 @@ export default function CreateOrganizationPage() {
   }
 
   return (
-    <div className="flex-1 flex items-center justify-center p-6 relative overflow-hidden">
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', position: 'relative', overflow: 'hidden', minHeight: '100vh' }}>
       {/* Background embellishments */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-500/10 blur-[120px] pointer-events-none" />
+      <div style={{ position: 'absolute', top: '-10%', left: '-10%', width: '40%', height: '40%', borderRadius: '50%', background: 'rgba(139,92,246,0.08)', filter: 'blur(120px)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: '-10%', right: '-10%', width: '40%', height: '40%', borderRadius: '50%', background: 'rgba(16,185,129,0.08)', filter: 'blur(120px)', pointerEvents: 'none' }} />
 
-      <div className="w-full max-w-md bg-surface border border-border/50 p-8 rounded-2xl shadow-2xl relative z-10 backdrop-blur-xl">
-        <div className="flex items-center gap-4 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Building2 className="text-white" size={24} />
+      <div style={{ width: '100%', maxWidth: '440px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.08)', padding: '2.5rem', borderRadius: '1.25rem', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', position: 'relative', zIndex: 10, backdropFilter: 'blur(20px)' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(139,92,246,0.3)', flexShrink: 0 }}>
+            <Building2 color="white" size={24} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400">
+            <h1 style={{ fontSize: '1.375rem', fontWeight: 700, background: 'linear-gradient(135deg, #e2e2e8, #8c909f)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '0.125rem' }}>
               Welcome to DevIntelAI
             </h1>
-            <p className="text-muted-foreground text-sm">Let's set up your workspace</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Let's set up your workspace</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {error && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+            <div style={{ padding: '0.75rem', borderRadius: '0.625rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <AlertCircle size={16} /> {error}
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-200 ml-1">Organization Name</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: '#c2c6d6', marginLeft: '0.25rem' }}>Organization Name</label>
             <input
               type="text"
               value={orgName}
               onChange={handleNameChange}
               placeholder="e.g. Acme Corp"
-              className="w-full bg-surface-hover border border-border/60 rounded-xl px-4 py-3 text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
               required
+              style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.75rem', padding: '0.75rem 1rem', color: '#e2e2e8', fontSize: '0.9375rem', outline: 'none', transition: 'border-color 0.2s' }}
+              onFocus={e => (e.target.style.borderColor = 'rgba(139,92,246,0.6)')}
+              onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-200 ml-1">Workspace URL Slug</label>
-            <div className="relative flex items-center">
-              <span className="absolute left-4 text-gray-500 text-sm">devintel.ai/</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: '#c2c6d6', marginLeft: '0.25rem' }}>Workspace URL Slug</label>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <span style={{ position: 'absolute', left: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem', pointerEvents: 'none', zIndex: 1 }}>devintel.ai/</span>
               <input
                 type="text"
                 value={slug}
                 onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                 placeholder="acme-corp"
-                className="w-full bg-surface-hover border border-border/60 rounded-xl pl-[96px] pr-4 py-3 text-gray-100 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
                 required
+                style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.75rem', paddingLeft: '6.5rem', paddingRight: '1rem', paddingTop: '0.75rem', paddingBottom: '0.75rem', color: '#e2e2e8', fontSize: '0.9375rem', outline: 'none', transition: 'border-color 0.2s' }}
+                onFocus={e => (e.target.style.borderColor = 'rgba(139,92,246,0.6)')}
+                onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
               />
             </div>
           </div>
@@ -129,21 +150,24 @@ export default function CreateOrganizationPage() {
           <button
             type="submit"
             disabled={loading || !orgName || !slug}
-            className="w-full mt-4 bg-gradient-brand text-white font-medium rounded-xl py-3 px-4 flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:active:scale-100 shadow-lg shadow-indigo-500/25"
+            style={{ width: '100%', marginTop: '0.5rem', background: loading || !orgName || !slug ? 'rgba(139,92,246,0.35)' : 'var(--gradient-brand)', color: 'white', fontWeight: 600, borderRadius: '0.75rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', border: 'none', cursor: loading || !orgName || !slug ? 'not-allowed' : 'pointer', fontSize: '0.9375rem', boxShadow: '0 8px 24px rgba(139,92,246,0.25)', transition: 'opacity 0.2s' }}
           >
             {loading ? (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div style={{ width: '20px', height: '20px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
             ) : (
               'Create organization'
             )}
           </button>
         </form>
 
-        <div className="mt-8 flex justify-center items-center gap-2">
-          <div className="h-2 w-8 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"></div>
-          <div className="h-2 w-2 rounded-full bg-gray-700"></div>
+        {/* Stepper */}
+        <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ height: '6px', width: '32px', borderRadius: '100px', background: '#6366f1', boxShadow: '0 0 8px rgba(99,102,241,0.5)' }} />
+          <div style={{ height: '6px', width: '8px', borderRadius: '100px', background: 'rgba(255,255,255,0.1)' }} />
         </div>
       </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

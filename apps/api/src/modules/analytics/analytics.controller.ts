@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards, Res } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Res, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
@@ -17,12 +17,12 @@ export class AnalyticsController {
   @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
   @ApiOperation({ summary: 'Get DORA four key metrics for an organization' })
   getDora(
-    @Query('organizationId') organizationId: string,
+    @Request() req: any,
     @Query('projectId') projectId?: string,
     @Query('days') days?: string,
   ) {
     return this.service.getDoraMetrics(
-      organizationId,
+      req.user.organizationId,
       days ? parseInt(days) : 30,
       projectId
     );
@@ -33,10 +33,11 @@ export class AnalyticsController {
   @ApiOperation({ summary: 'Export DORA metrics in CSV format for compliance reporting' })
   async exportDoraMetrics(
     @Res() res: Response,
-    @Query('organizationId') organizationId: string,
+    @Request() req: any,
     @Query('projectId') projectId?: string,
     @Query('days') days?: string,
   ) {
+    const organizationId = req.user.organizationId;
     const period = days ? parseInt(days) : 30;
     const metrics = await this.service.getDoraMetrics(organizationId, period, projectId);
 

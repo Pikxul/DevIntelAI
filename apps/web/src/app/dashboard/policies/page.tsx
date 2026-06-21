@@ -3,8 +3,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import { getPolicies, createPolicy, updatePolicy, deletePolicy, togglePolicy, Policy } from '@/lib/api';
 import { Shield, Plus, CheckCircle2, FileText, Trash2, Edit2, ShieldAlert, ShieldCheck, ShieldOff, MinusCircle, Clock, AlertTriangle } from 'lucide-react';
-
-const DEFAULT_ORG = 'default-org';
+import { useOrganizationId } from '@/hooks/useOrganizationId';
 
 interface RuleState {
   field: string;
@@ -13,6 +12,7 @@ interface RuleState {
 }
 
 function PolicyModal({ onClose, onSuccess, policy }: { onClose: () => void; onSuccess: () => void; policy?: Policy }) {
+  const orgId = useOrganizationId();
   const [form, setForm] = useState({
     name: policy?.name ?? '',
     description: policy?.description ?? '',
@@ -52,7 +52,7 @@ function PolicyModal({ onClose, onSuccess, policy }: { onClose: () => void; onSu
     setError('');
     try {
       const payload = {
-        organizationId: DEFAULT_ORG,
+        organizationId: orgId,
         name: form.name,
         description: form.description,
         action: form.action as Policy['action'],
@@ -205,6 +205,7 @@ function PolicyModal({ onClose, onSuccess, policy }: { onClose: () => void; onSu
 }
 
 export default function PoliciesPage() {
+  const orgId = useOrganizationId();
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -215,14 +216,14 @@ export default function PoliciesPage() {
 
   const fetchPolicies = useCallback(async () => {
     try {
-      const data = await getPolicies(DEFAULT_ORG);
+      const data = await getPolicies(orgId);
       setPolicies(data);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [orgId]);
 
   useEffect(() => { fetchPolicies(); }, [fetchPolicies]);
 

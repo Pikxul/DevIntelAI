@@ -115,7 +115,7 @@ describe('DeploymentsService', () => {
   describe('rollback', () => {
     it('returns null when deployment has no previous image tag', async () => {
       repo.findOne.mockResolvedValue({ id: 'dep-4', previousImageTag: null });
-      const result = await service.rollback('dep-4', 'critical anomaly');
+      const result = await service.rollback('dep-4', 'critical anomaly', 'org1');
       expect(result).toBeNull();
       expect(repo.update).not.toHaveBeenCalled();
     });
@@ -128,7 +128,7 @@ describe('DeploymentsService', () => {
 
       repo.update.mockResolvedValue({});
 
-      const result = await service.rollback('dep-5', 'critical anomaly');
+      const result = await service.rollback('dep-5', 'critical anomaly', 'org1');
 
       expect(repo.update).toHaveBeenCalledWith(
         'dep-5',
@@ -141,7 +141,7 @@ describe('DeploymentsService', () => {
 
     it('returns null when deployment is not found', async () => {
       repo.findOne.mockResolvedValue(null);
-      const result = await service.rollback('nonexistent', 'reason');
+      const result = await service.rollback('nonexistent', 'reason', 'org1');
       expect(result).toBeNull();
     });
   });
@@ -155,7 +155,7 @@ describe('DeploymentsService', () => {
         { status: 'failed', strategy: 'blue_green', rolledBackAt: null },
       ]);
 
-      const stats = await service.getStats();
+      const stats = await service.getStats('org1');
 
       expect(stats.total).toBe(4);
       expect(stats.succeeded).toBe(2);

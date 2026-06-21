@@ -3,8 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import { getIncidents, getIncidentRCA, getIncidentTimeline, updateIncidentStatus, rollbackDeployment, getProjects, Incident, RootCauseAnalysis, IncidentTimelineEvent, Project } from '@/lib/api';
 import { AlertOctagon, AlertTriangle, AlertCircle, BarChart3, Info, Cpu, Search, Rocket, Send, CheckCircle2, Clock, Terminal, ShieldAlert, Sliders, Play, X, RefreshCw } from 'lucide-react';
-
-const DEFAULT_ORG = 'default-org';
+import { useOrganizationId } from '@/hooks/useOrganizationId';
 
 const severityConfig = {
   critical: { badge: 'badge-danger', icon: <AlertCircle size={20} className="text-red-500 animate-pulse" />, border: 'rgba(239, 68, 68, 0.4)', bg: 'rgba(239, 68, 68, 0.05)', color: 'var(--accent-red)' },
@@ -340,13 +339,14 @@ function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: 
 
 // Sandbox Drawer Component (T5.6)
 function SandboxDrawer({ isOpen, onClose, onInject }: { isOpen: boolean; onClose: () => void; onInject: () => void }) {
+  const orgId = useOrganizationId();
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
-      getProjects(DEFAULT_ORG).then(projs => {
+      getProjects(orgId).then(projs => {
         setProjects(projs);
         if (projs.length > 0) {
           setSelectedProjectId(projs[0].id);

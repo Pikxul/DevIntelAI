@@ -10,6 +10,7 @@ const mockAnomalyAlertRepo = () => ({
   find: jest.fn(),
   findOne: jest.fn(),
   update: jest.fn(),
+  createQueryBuilder: jest.fn(),
 });
 
 const mockEventsGateway = () => ({
@@ -47,16 +48,24 @@ describe('MonitoringService', () => {
         { id: 'a-2', title: 'OOM Warning', autoRollbackTriggered: false },
       ];
 
-      repo.find.mockResolvedValue(mockAlerts);
+      const qbMock = {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockAlerts),
+      };
+      repo.createQueryBuilder.mockReturnValue(qbMock);
 
-      const result = await service.getActiveAlerts();
+      const result = await service.getActiveAlerts('org1');
 
-      expect(repo.find).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { autoRollbackTriggered: false },
-          order: { detectedAt: 'DESC' },
-        }),
-      );
+      expect(repo.createQueryBuilder).toHaveBeenCalledWith('a');
+      expect(qbMock.innerJoin).toHaveBeenCalledWith('deployments', 'd', 'a.deploymentId = d.id');
+      expect(qbMock.innerJoin).toHaveBeenCalledWith('pipeline_runs', 'p', 'd.pipelineRunId = p.id');
+      expect(qbMock.where).toHaveBeenCalledWith('p.organizationId = :organizationId', { organizationId: 'org1' });
+      expect(qbMock.andWhere).toHaveBeenCalledWith('a.autoRollbackTriggered = :triggered', { triggered: false });
+      expect(qbMock.getMany).toHaveBeenCalled();
       expect(result).toEqual(mockAlerts);
     });
   });

@@ -19,7 +19,7 @@ export class PolicyEngineService {
 
     // 1. Enforce Project-Specific Risk Thresholds (T4.3)
     if (projectId) {
-      const project = await this.projectRepo.findOne({ where: { id: projectId } });
+      const project = await this.projectRepo.findOne({ where: { id: projectId, organizationId } });
       if (project && review.riskScore && typeof review.riskScore.overall === 'number') {
         const overallRisk = review.riskScore.overall;
         if (overallRisk >= project.riskThreshold) {
@@ -107,9 +107,9 @@ export class PolicyEngineService {
     return this.repo.save(policy);
   }
 
-  async updatePolicy(id: string, data: Partial<PipelinePolicy>): Promise<PipelinePolicy | null> {
-    await this.repo.update(id, data);
-    return this.repo.findOne({ where: { id } });
+  async updatePolicy(id: string, data: Partial<PipelinePolicy>, organizationId: string): Promise<PipelinePolicy | null> {
+    await this.repo.update({ id, organizationId }, data);
+    return this.repo.findOne({ where: { id, organizationId } });
   }
 
   async getPolicies(organizationId: string): Promise<PipelinePolicy[]> {
@@ -117,7 +117,7 @@ export class PolicyEngineService {
     return this.repo.find({ where, order: { createdAt: 'DESC' } });
   }
 
-  async deletePolicy(id: string): Promise<void> {
-    await this.repo.delete(id);
+  async deletePolicy(id: string, organizationId: string): Promise<void> {
+    await this.repo.delete({ id, organizationId });
   }
 }

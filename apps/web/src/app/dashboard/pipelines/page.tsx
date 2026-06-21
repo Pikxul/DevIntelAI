@@ -5,8 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getPipelines, getPipelineStats, triggerPipeline, getProjects, PipelineRun, PipelineStats, Project } from '@/lib/api';
 import { GitBranch, RefreshCw, Play, Sparkles, CheckCircle2, XCircle, Clock, BarChart3, ArrowUpCircle, GitPullRequest, AlertTriangle } from 'lucide-react';
-
-const DEFAULT_ORG = 'default-org';
+import { useOrganizationId } from '@/hooks/useOrganizationId';
 
 const STAGES = ['code_push', 'ai_review', 'security_scan', 'unit_tests', 'containerize', 'deploy', 'notify'];
 const STAGE_LABELS: Record<string, string> = {
@@ -41,6 +40,7 @@ function getDuration(run: PipelineRun): string {
 
 export default function PipelinesPage() {
   const router = useRouter();
+  const orgId = useOrganizationId();
   const [pipelines, setPipelines] = useState<PipelineRun[]>([]);
   const [stats, setStats] = useState<PipelineStats | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -53,7 +53,7 @@ export default function PipelinesPage() {
     branch: 'main',
     message: 'feat: manual pipeline trigger',
     projectId: '',
-    organizationId: 'default-org',
+    organizationId: orgId,
   });
 
   const handleTrigger = async (e: React.FormEvent) => {
@@ -77,9 +77,9 @@ export default function PipelinesPage() {
   const fetchData = useCallback(async () => {
     try {
       const [runs, pStats, projs] = await Promise.all([
-        getPipelines(DEFAULT_ORG),
-        getPipelineStats(DEFAULT_ORG),
-        getProjects(DEFAULT_ORG),
+        getPipelines(orgId),
+        getPipelineStats(orgId),
+        getProjects(orgId),
       ]);
       setPipelines(runs);
       setStats(pStats);
@@ -88,6 +88,7 @@ export default function PipelinesPage() {
         setTriggerForm(prev => ({
           ...prev,
           projectId: projs[0].id,
+          organizationId: orgId,
         }));
       }
     } catch (err: any) {
@@ -95,7 +96,7 @@ export default function PipelinesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [orgId]);
 
   useEffect(() => {
     fetchData();

@@ -11,15 +11,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   // ── Onboarding gate ──────────────────────────────────────────────────────
-  // If the user just signed up (isNewUser=true in JWT) and hasn't yet
-  // completed the onboarding wizard, redirect them to /onboarding.
-  // The cookie 'onboarding_complete' is set by /api/github/callback when the
-  // GitHub App is installed — it overrides the JWT flag for the cookie TTL.
+  // Redirect to onboarding if:
+  //   1. The user just signed up (isNewUser=true in JWT), AND
+  //   2. They have no organization yet (organizationId is missing), AND
+  //   3. The onboarding_complete cookie hasn't been set
   const cookieStore = await cookies();
   const onboardingDone = cookieStore.get('onboarding_complete')?.value === '1';
   const isNewUser = (session as any)?.isNewUser === true;
+  const hasOrg = !!(session as any)?.organizationId;
 
-  if (isNewUser && !onboardingDone) {
+  if (isNewUser && !hasOrg && !onboardingDone) {
     redirect('/onboarding');
   }
 

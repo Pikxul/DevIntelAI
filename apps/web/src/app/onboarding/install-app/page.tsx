@@ -1,134 +1,132 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Github, CheckCircle2, AlertCircle, ArrowRight, Server, Shield, Zap } from 'lucide-react';
+import { Github, CheckCircle2, AlertCircle, Server, Shield, Zap } from 'lucide-react';
 import { completeOnboarding } from '@/lib/api';
 
 export default function InstallAppPage() {
   const router = useRouter();
   const [appName, setAppName] = useState('');
-  
+
   useEffect(() => {
-    // We get this from the env variable exposed to the frontend
     setAppName(process.env.NEXT_PUBLIC_GITHUB_APP_NAME || 'devintelai');
   }, []);
 
   const handleInstallClick = () => {
-    // The callback will hit our /api/github/callback route
-    // which handles the installation_id and marks onboarding as complete
     const installUrl = `https://github.com/apps/${appName}/installations/new`;
     window.location.href = installUrl;
   };
 
   const handleSkip = async () => {
     try {
-      // If they skip, mark onboarding as complete manually
       await completeOnboarding();
       router.push('/dashboard');
     } catch (e) {
       console.error(e);
-      // Fallback
       router.push('/dashboard');
     }
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center p-6 relative overflow-hidden">
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', position: 'relative', overflow: 'hidden', minHeight: '100vh' }}>
       {/* Background embellishments */}
-      <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-500/10 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none" />
+      <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '40%', height: '40%', borderRadius: '50%', background: 'rgba(16,185,129,0.07)', filter: 'blur(120px)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: '-10%', left: '-10%', width: '40%', height: '40%', borderRadius: '50%', background: 'rgba(139,92,246,0.07)', filter: 'blur(120px)', pointerEvents: 'none' }} />
 
-      <div className="w-full max-w-2xl bg-surface border border-border/50 p-1 rounded-2xl shadow-2xl relative z-10 backdrop-blur-xl flex flex-col md:flex-row overflow-hidden">
-        
-        <div className="p-8 md:w-3/5 flex flex-col justify-center">
-          <div className="w-12 h-12 rounded-xl bg-[#24292e] flex items-center justify-center shadow-lg mb-6 border border-white/10">
-            <Github className="text-white" size={24} />
+      {/* Card */}
+      <div style={{ width: '100%', maxWidth: '680px', background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '1.25rem', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', position: 'relative', zIndex: 10, backdropFilter: 'blur(20px)', overflow: 'hidden', display: 'flex', flexDirection: 'row' }}>
+
+        {/* Left content */}
+        <div style={{ padding: '2.5rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          {/* GitHub icon */}
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#24292e', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.4)', marginBottom: '1.5rem', flexShrink: 0 }}>
+            <Github color="white" size={24} />
           </div>
-          
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400 mb-2">
+
+          <h1 style={{ fontSize: '1.375rem', fontWeight: 700, background: 'linear-gradient(135deg, #e2e2e8, #8c909f)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '0.5rem' }}>
             Connect GitHub
           </h1>
-          <p className="text-muted-foreground text-sm mb-6">
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.75rem', lineHeight: 1.6 }}>
             Install the DevIntelAI GitHub App to enable automated pipeline reviews, AI anomaly detection, and CI/CD monitoring.
           </p>
 
-          <div className="space-y-4 mb-8">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 text-emerald-400 bg-emerald-400/10 p-1 rounded-full"><Zap size={14} /></div>
-              <div>
-                <p className="text-sm font-medium text-gray-200">Real-time Sync</p>
-                <p className="text-xs text-gray-500">Automated ingestion of commits and PRs</p>
+          {/* Feature list */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+            {[
+              { icon: <Zap size={14} />, color: '#10b981', bg: 'rgba(16,185,129,0.1)', title: 'Real-time Sync', desc: 'Automated ingestion of commits and PRs' },
+              { icon: <Shield size={14} />, color: '#6366f1', bg: 'rgba(99,102,241,0.1)', title: 'Secure AI Reviews', desc: 'LLM-powered code scanning on every commit' },
+              { icon: <Server size={14} />, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', title: 'Zero-Config Deployments', desc: 'We automatically track deployments via webhooks' },
+            ].map(item => (
+              <div key={item.title} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                <div style={{ marginTop: '1px', color: item.color, background: item.bg, padding: '5px', borderRadius: '50%', flexShrink: 0, display: 'flex' }}>{item.icon}</div>
+                <div>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#c2c6d6', marginBottom: '0.125rem' }}>{item.title}</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.desc}</p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 text-indigo-400 bg-indigo-400/10 p-1 rounded-full"><Shield size={14} /></div>
-              <div>
-                <p className="text-sm font-medium text-gray-200">Secure AI Reviews</p>
-                <p className="text-xs text-gray-500">LLM-powered code scanning on every commit</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 text-amber-400 bg-amber-400/10 p-1 rounded-full"><Server size={14} /></div>
-              <div>
-                <p className="text-sm font-medium text-gray-200">Zero-Config Deployments</p>
-                <p className="text-xs text-gray-500">We automatically track deployments via webhooks</p>
-              </div>
-            </div>
+            ))}
           </div>
 
+          {/* CTA buttons */}
           <button
             onClick={handleInstallClick}
-            className="w-full bg-[#2ea44f] hover:bg-[#2c974b] text-white font-medium rounded-xl py-3 px-4 flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-emerald-500/25"
+            style={{ width: '100%', background: '#2ea44f', color: 'white', fontWeight: 600, borderRadius: '0.75rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', border: 'none', cursor: 'pointer', fontSize: '0.9375rem', boxShadow: '0 6px 20px rgba(46,164,79,0.3)', transition: 'background 0.2s' }}
+            onMouseOver={e => ((e.currentTarget as HTMLButtonElement).style.background = '#2c974b')}
+            onMouseOut={e => ((e.currentTarget as HTMLButtonElement).style.background = '#2ea44f')}
           >
             <Github size={18} /> Install GitHub App
           </button>
-          
+
           <button
             onClick={handleSkip}
-            className="w-full mt-3 bg-transparent text-gray-500 hover:text-gray-300 font-medium rounded-xl py-2 px-4 transition-all text-sm"
+            style={{ width: '100%', marginTop: '0.75rem', background: 'transparent', color: 'var(--text-muted)', fontWeight: 500, borderRadius: '0.75rem', padding: '0.625rem 1rem', border: 'none', cursor: 'pointer', fontSize: '0.875rem', transition: 'color 0.2s' }}
+            onMouseOver={e => ((e.currentTarget as HTMLButtonElement).style.color = '#e2e2e8')}
+            onMouseOut={e => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)')}
           >
             Skip for now
           </button>
         </div>
 
-        {/* Right side illustration */}
-        <div className="hidden md:flex md:w-2/5 bg-gradient-to-br from-gray-900 to-black border-l border-border/50 items-center justify-center p-6 relative">
-           <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
-           
-           <div className="relative flex flex-col gap-4 w-full">
-             <div className="bg-surface/80 border border-border/50 rounded-lg p-3 flex items-center gap-3 shadow-lg transform -rotate-2 hover:rotate-0 transition-all">
-                <div className="w-8 h-8 rounded bg-emerald-500/20 flex items-center justify-center text-emerald-400"><CheckCircle2 size={16} /></div>
-                <div className="flex-1">
-                  <div className="h-2 w-16 bg-gray-600 rounded mb-1.5"></div>
-                  <div className="h-1.5 w-24 bg-gray-700 rounded"></div>
-                </div>
-             </div>
-             
-             <div className="bg-surface/80 border border-border/50 rounded-lg p-3 flex items-center gap-3 shadow-lg transform translate-x-4 hover:translate-x-0 transition-all z-10">
-                <div className="w-8 h-8 rounded bg-indigo-500/20 flex items-center justify-center text-indigo-400"><Server size={16} /></div>
-                <div className="flex-1">
-                  <div className="h-2 w-20 bg-gray-600 rounded mb-1.5"></div>
-                  <div className="h-1.5 w-16 bg-gray-700 rounded"></div>
-                </div>
-             </div>
-             
-             <div className="bg-surface/80 border border-border/50 rounded-lg p-3 flex items-center gap-3 shadow-lg transform rotate-2 hover:rotate-0 transition-all">
-                <div className="w-8 h-8 rounded bg-amber-500/20 flex items-center justify-center text-amber-400"><AlertCircle size={16} /></div>
-                <div className="flex-1">
-                  <div className="h-2 w-12 bg-gray-600 rounded mb-1.5"></div>
-                  <div className="h-1.5 w-20 bg-gray-700 rounded"></div>
-                </div>
-             </div>
-           </div>
-        </div>
+        {/* Right illustration panel */}
+        <div style={{ width: '45%', background: 'linear-gradient(145deg, #1a1c20, #0d0f12)', borderLeft: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', position: 'relative', flexShrink: 0 }} className="hidden-mobile">
+          {/* Dot-grid background */}
+          <div style={{ position: 'absolute', inset: 0, opacity: 0.15, backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
 
+          {/* Floating cards */}
+          <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
+            {[
+              { Icon: CheckCircle2, color: '#10b981', bg: 'rgba(16,185,129,0.15)', transform: 'rotate(-2deg)' },
+              { Icon: Server, color: '#6366f1', bg: 'rgba(99,102,241,0.15)', transform: 'translateX(16px)' },
+              { Icon: AlertCircle, color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', transform: 'rotate(2deg)' },
+            ].map(({ Icon, color, bg, transform }, i) => (
+              <div
+                key={i}
+                style={{ background: 'rgba(30,32,36,0.85)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '0.625rem', padding: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', boxShadow: '0 4px 16px rgba(0,0,0,0.4)', transform, transition: 'transform 0.3s ease' }}
+              >
+                <div style={{ width: '32px', height: '32px', borderRadius: '6px', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon size={16} color={color} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ height: '6px', width: `${48 + i * 20}px`, background: 'rgba(255,255,255,0.15)', borderRadius: '3px', marginBottom: '6px' }} />
+                  <div style={{ height: '5px', width: `${64 + i * 8}px`, background: 'rgba(255,255,255,0.08)', borderRadius: '3px' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
-      
+
       {/* Stepper indicator */}
-      <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 flex justify-center items-center gap-2">
-        <div className="h-2 w-2 rounded-full bg-gray-700"></div>
-        <div className="h-2 w-8 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+      <div style={{ position: 'absolute', bottom: '2.5rem', left: '50%', transform: 'translateX(-50%)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ height: '6px', width: '8px', borderRadius: '100px', background: 'rgba(255,255,255,0.1)' }} />
+        <div style={{ height: '6px', width: '32px', borderRadius: '100px', background: '#10b981', boxShadow: '0 0 8px rgba(16,185,129,0.5)' }} />
       </div>
+
+      <style>{`
+        @media (max-width: 640px) {
+          .hidden-mobile { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }

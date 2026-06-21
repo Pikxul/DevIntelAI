@@ -1,5 +1,5 @@
 'use client';
-import { signIn } from 'next-auth/react';
+import { signIn, signOut } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import { Zap, Github, Terminal, AlertCircle } from 'lucide-react';
 import { useState, Suspense } from 'react';
@@ -11,9 +11,26 @@ function SignInContent() {
   const params = useSearchParams();
   const callbackError = params.get('error');
 
-  const handleSignIn = (provider: string) => {
+  const handleSignIn = async (provider: string) => {
     setLoadingProvider(provider);
-    signIn(provider, { callbackUrl: '/dashboard' });
+
+    if (activeTab === 'signup') {
+      // Clear any existing session first so OAuth starts fresh.
+      // Without this, NextAuth silently reuses the current session
+      // and the user gets logged in as the old account.
+      await signOut({ redirect: false });
+
+      // Force the provider's account picker / login screen
+      if (provider === 'google') {
+        signIn(provider, { callbackUrl: '/dashboard' }, { prompt: 'select_account' });
+      } else if (provider === 'github') {
+        signIn(provider, { callbackUrl: '/dashboard' }, { login: '' });
+      } else {
+        signIn(provider, { callbackUrl: '/dashboard' });
+      }
+    } else {
+      signIn(provider, { callbackUrl: '/dashboard' });
+    }
   };
 
   const isDevMode = process.env.NODE_ENV === 'development';

@@ -1,15 +1,15 @@
 'use client';
 import useSWR from 'swr';
 import { getPipelineStats, getAIReviewStats, getPipelines, getActiveAlerts, PipelineStats, AIReviewStats, PipelineRun, AnomalyAlert } from '@/lib/api';
-
-const ORG_ID = 'default-org'; // TODO: get from session once multi-tenancy is added
+import { useOrganizationId } from '@/hooks/useOrganizationId';
 
 // ─── Pipeline Stats ───────────────────────────────────────────────────────────
 
 export function usePipelineStats() {
+  const orgId = useOrganizationId();
   const { data, error, isLoading, mutate } = useSWR<PipelineStats>(
-    'pipeline-stats',
-    () => getPipelineStats(ORG_ID),
+    `pipeline-stats:${orgId}`,
+    () => getPipelineStats(orgId),
     { revalidateOnFocus: false },
   );
   return { stats: data, error, isLoading, refresh: mutate };
@@ -29,9 +29,10 @@ export function useAIReviewStats() {
 // ─── Recent Pipelines ─────────────────────────────────────────────────────────
 
 export function useRecentPipelines() {
+  const orgId = useOrganizationId();
   const { data, error, isLoading, mutate } = useSWR<PipelineRun[]>(
-    'recent-pipelines',
-    () => getPipelines(ORG_ID),
+    `recent-pipelines:${orgId}`,
+    () => getPipelines(orgId),
     { revalidateOnFocus: false },
   );
   return { pipelines: data ?? [], error, isLoading, refresh: mutate };

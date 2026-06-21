@@ -5,6 +5,12 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Base URL points to the Next.js dev server. The dashboard is accessible
  * without authentication in development (NODE_ENV=development bypass).
+ *
+ * Projects:
+ *   - chromium (default, desktop)
+ *   - firefox
+ *   - webkit (Safari)
+ *   - mobile-chrome (responsive tests)
  */
 export default defineConfig({
   testDir: './e2e',
@@ -17,7 +23,15 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
 
   /* Sequential to avoid port conflicts on a single dev server */
-  workers: 1,
+  workers: process.env.CI ? 1 : 2,
+
+  /* Global timeout per test */
+  timeout: 60_000,
+
+  /* Assertion-level timeout */
+  expect: {
+    timeout: 10_000,
+  },
 
   /* Reporter configuration – collect HTML report + JSON for artifact parsing */
   reporter: [
@@ -46,6 +60,24 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         /* Save screenshots to named artifact folder */
         screenshot: 'on',
+      },
+    },
+    {
+      name: 'firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+      },
+    },
+    {
+      name: 'webkit',
+      use: {
+        ...devices['Desktop Safari'],
+      },
+    },
+    {
+      name: 'mobile-chrome',
+      use: {
+        ...devices['Pixel 5'],
       },
     },
   ],

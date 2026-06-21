@@ -17,6 +17,8 @@ const NAV_ROUTES = [
   { label: 'Governance',   href: '/dashboard/governance',  heading: /Govern/i },
   { label: 'Projects',     href: '/dashboard/projects',    heading: /Project/i },
   { label: 'Settings',     href: '/dashboard/settings',    heading: /Setting/i },
+  { label: 'Analytics',    href: '/dashboard/analytics',   heading: /Analytics|Engineering/i },
+  { label: 'Policies',     href: '/dashboard/policies',    heading: /Polic|Governance/i },
 ];
 
 test.describe('Dashboard Navigation', () => {

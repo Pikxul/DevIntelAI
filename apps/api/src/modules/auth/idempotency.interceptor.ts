@@ -24,7 +24,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
       throw new BadRequestException('Invalid Idempotency-Key header');
     }
 
-    const cached = this.cache.get(key);
+    const orgId = request.user?.organizationId || request.user?.org || 'anonymous';
+    const cacheKey = `org:${orgId}:idempotency:${key}`;
+
+    const cached = this.cache.get(cacheKey);
     if (cached) {
       response.status(cached.status);
       response.setHeader('x-cache-idempotent', 'true');
@@ -34,11 +37,11 @@ export class IdempotencyInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap((body) => {
         const statusCode = response.statusCode || 200;
-        this.cache.set(key, { body, status: statusCode });
+        this.cache.set(cacheKey, { body, status: statusCode });
         
         // Auto-cleanup keys after 5 minutes to avoid memory leaks
         setTimeout(() => {
-          this.cache.delete(key);
+          this.cache.delete(cacheKey);
         }, 300000);
       }),
     );

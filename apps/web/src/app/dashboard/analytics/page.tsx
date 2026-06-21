@@ -18,8 +18,7 @@ import {
   Bot,
   Download
 } from 'lucide-react';
-
-const DEFAULT_ORG = 'default-org';
+import { useOrganizationId } from '@/hooks/useOrganizationId';
 
 const doraLevelColor: Record<string, string> = {
   Elite: 'var(--accent-green)',
@@ -38,6 +37,7 @@ const CHART_TOOLTIP_STYLE = {
 type Days = 7 | 14 | 30;
 
 export default function AnalyticsPage() {
+  const orgId = useOrganizationId();
   const [dora, setDora] = useState<DoraMetrics | null>(null);
   const [pipelineStats, setPipelineStats] = useState<{ total: number; succeeded: number; failed: number; successRate: number } | null>(null);
   const [aiStats, setAiStats] = useState<{ total: number; approved: number; blocked: number; avgRiskScore: number; totalCostUsd: string } | null>(null);
@@ -50,15 +50,15 @@ export default function AnalyticsPage() {
 
   // Fetch projects list for the dropdown filter (T6.3)
   useEffect(() => {
-    getProjects(DEFAULT_ORG)
+    getProjects(orgId)
       .then(setProjects)
       .catch(e => console.error('Failed to fetch projects:', e));
-  }, []);
+  }, [orgId]);
 
   const fetchData = useCallback(() => {
     Promise.allSettled([
-      getDoraMetrics(DEFAULT_ORG, days, selectedProject || undefined),
-      getPipelineStats(DEFAULT_ORG),
+      getDoraMetrics(orgId, days, selectedProject || undefined),
+      getPipelineStats(orgId),
       getAIReviewStats(),
     ]).then(([doraRes, pipelineRes, aiRes]) => {
       if (doraRes.status === 'fulfilled') {
@@ -89,7 +89,7 @@ export default function AnalyticsPage() {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
       
-      const query = new URLSearchParams({ organizationId: DEFAULT_ORG, days: String(days) });
+      const query = new URLSearchParams({ organizationId: orgId, days: String(days) });
       if (selectedProject) query.set('projectId', selectedProject);
 
       const res = await fetch(`${API_URL}/api/v1/analytics/dora/export?${query}`, {

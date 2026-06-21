@@ -44,7 +44,16 @@ export class MonitoringService {
 
     // Emit live WebSocket event
     try {
-      this.eventsGateway.emitAnomalyAlert(saved);
+      let orgId = 'default-org';
+      const res = await this.repo.createQueryBuilder('a')
+        .innerJoin('deployments', 'd', 'd.id = :deploymentId', { deploymentId })
+        .innerJoin('pipeline_runs', 'p', 'd.pipelineRunId = p.id')
+        .select('p.organizationId', 'orgId')
+        .getRawOne();
+      if (res && res.orgId) {
+        orgId = res.orgId;
+      }
+      this.eventsGateway.emitAnomalyAlert(orgId, saved);
     } catch (err) {
       this.logger.warn(`Failed to emit anomaly WebSocket alert: ${err.message}`);
     }
@@ -52,17 +61,28 @@ export class MonitoringService {
     return saved;
   }
 
-  async getAnomalies(deploymentId?: string, limit = 20): Promise<AnomalyAlert[]> {
-    const where = deploymentId ? { deploymentId } : {};
-    return this.repo.find({ where, order: { detectedAt: 'DESC' }, take: limit });
+  async getAnomalies(organizationId: string, deploymentId?: string, limit = 20): Promise<AnomalyAlert[]> {
+    const qb = this.repo.createQueryBuilder('a')
+      .innerJoin('deployments', 'd', 'a.deploymentId = d.id')
+      .innerJoin('pipeline_runs', 'p', 'd.pipelineRunId = p.id')
+      .where('p.organizationId = :organizationId', { organizationId });
+
+    if (deploymentId) {
+      qb.andWhere('a.deploymentId = :deploymentId', { deploymentId });
+    }
+
+    return qb.orderBy('a.detectedAt', 'DESC').take(limit).getMany();
   }
 
-  async getActiveAlerts(): Promise<AnomalyAlert[]> {
-    return this.repo.find({
-      where: { autoRollbackTriggered: false },
-      order: { detectedAt: 'DESC' },
-      take: 10,
-    });
+  async getActiveAlerts(organizationId: string): Promise<AnomalyAlert[]> {
+    return this.repo.createQueryBuilder('a')
+      .innerJoin('deployments', 'd', 'a.deploymentId = d.id')
+      .innerJoin('pipeline_runs', 'p', 'd.pipelineRunId = p.id')
+      .where('p.organizationId = :organizationId', { organizationId })
+      .andWhere('a.autoRollbackTriggered = :triggered', { triggered: false })
+      .orderBy('a.detectedAt', 'DESC')
+      .take(10)
+      .getMany();
   }
 
   async markRollbackTriggered(alertId: string): Promise<void> {

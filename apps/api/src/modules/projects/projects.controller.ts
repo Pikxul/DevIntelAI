@@ -21,10 +21,10 @@ export class ProjectsController {
     private readonly githubAppService: GitHubAppService,
   ) {}
 
-  @Post() create(@Body() body: Partial<Project>) { return this.service.create(body); }
-  @Get() findAll(@Query('organizationId') orgId: string) { return this.service.findAll(orgId); }
-  @Get(':id') findOne(@Param('id') id: string) { return this.service.findOne(id); }
-  @Put(':id') update(@Param('id') id: string, @Body() body: Partial<Project>) { return this.service.update(id, body); }
+  @Post() create(@Body() body: Partial<Project>, @Request() req: any) { return this.service.create({ ...body, organizationId: req.user.organizationId }); }
+  @Get() findAll(@Request() req: any) { return this.service.findAll(req.user.organizationId); }
+  @Get(':id') findOne(@Param('id') id: string, @Request() req: any) { return this.service.findOne(id, req.user.organizationId); }
+  @Put(':id') update(@Param('id') id: string, @Body() body: Partial<Project>, @Request() req: any) { return this.service.update(id, body, req.user.organizationId); }
 
   @Get('github/repos')
   @ApiOperation({ summary: 'List GitHub repositories available for connection' })
@@ -42,13 +42,12 @@ export class ProjectsController {
   @Post('connect-github')
   @ApiOperation({ summary: 'Connect a GitHub repository (creates project + registers webhook)' })
   connectGitHub(@Body() body: {
-    organizationId: string;
     repoFullName: string;
     name: string;
     defaultBranch?: string;
   }, @Request() req: any) {
     const userId = req.user?.userId ?? req.user?.sub;
-    return this.service.connectGitHubRepo({ ...body, userId });
+    return this.service.connectGitHubRepo({ ...body, organizationId: req.user.organizationId, userId });
   }
 
   @Get('github/installations/:installationId/repos')
@@ -61,31 +60,31 @@ export class ProjectsController {
   @ApiOperation({ summary: 'Connect a repository via GitHub App' })
   connectAppRepo(
     @Body() body: {
-      organizationId: string;
       installationId: number;
       repoFullName: string;
       name: string;
       defaultBranch?: string;
     },
+    @Request() req: any
   ) {
-    return this.service.connectGitHubAppRepo(body);
+    return this.service.connectGitHubAppRepo({ ...body, organizationId: req.user.organizationId });
   }
 
   @Get(':id/commits')
   @ApiOperation({ summary: 'List commits for a specific project/repository' })
-  getCommits(@Param('id') id: string) {
-    return this.service.findCommits(id);
+  getCommits(@Param('id') id: string, @Request() req: any) {
+    return this.service.findCommits(id, req.user.organizationId);
   }
 
   @Get(':id/sync-status')
   @ApiOperation({ summary: 'Get the background sync status for a project' })
-  getSyncStatus(@Param('id') id: string) {
-    return this.service.getSyncStatus(id);
+  getSyncStatus(@Param('id') id: string, @Request() req: any) {
+    return this.service.getSyncStatus(id, req.user.organizationId);
   }
 
   @Get(':id/pull-requests')
   @ApiOperation({ summary: 'List pull requests for a specific project/repository' })
-  getPullRequests(@Param('id') id: string) {
-    return this.service.findPullRequests(id);
+  getPullRequests(@Param('id') id: string, @Request() req: any) {
+    return this.service.findPullRequests(id, req.user.organizationId);
   }
 }

@@ -38,7 +38,7 @@ export class WebhooksController {
     // Try to auto-detect project from repo fullname
     const repoFullName = (body as any).repository?.full_name;
     if (repoFullName) {
-      const project = await this.projectsService.findByGithubRepo(repoFullName);
+      const project = await this.projectsService.findByGithubRepo(repoFullName, resolvedOrgId);
       if (project) {
         resolvedProjectId = project.id;
         resolvedOrgId = project.organizationId;
@@ -102,7 +102,7 @@ export class WebhooksController {
     // Try to auto-detect project from repo homepage URL
     const repoHomepage: string = (body as any).repository?.homepage ?? '';
     if (repoHomepage) {
-      const project = await this.projectsService.findByRepoUrl(repoHomepage);
+      const project = await this.projectsService.findByRepoUrl(repoHomepage, resolvedOrgId);
       if (project) {
         resolvedProjectId = project.id;
         resolvedOrgId = project.organizationId;

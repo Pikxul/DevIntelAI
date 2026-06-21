@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, BadRequestException, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PipelinesService, CreatePipelineRunDto } from './pipelines.service';
@@ -12,8 +12,8 @@ export class PipelinesController {
 
   @Post()
   @ApiOperation({ summary: 'Trigger a new pipeline run (also triggered by webhooks)' })
-  create(@Body() dto: CreatePipelineRunDto) {
-    return this.service.create(dto);
+  create(@Body() dto: CreatePipelineRunDto, @Request() req: any) {
+    return this.service.create({ ...dto, organizationId: req.user.organizationId });
   }
 
   @Post('trigger')
@@ -21,23 +21,20 @@ export class PipelinesController {
   triggerDemo(
     @Body() body: {
       projectId?: string;
-      organizationId?: string;
       branch?: string;
       author?: string;
       message?: string;
       diff?: string;
     },
+    @Request() req: any
   ) {
     if (!body.projectId) {
       throw new BadRequestException('projectId is required');
     }
-    if (!body.organizationId) {
-      throw new BadRequestException('organizationId is required');
-    }
 
     return this.service.create({
       projectId: body.projectId,
-      organizationId: body.organizationId,
+      organizationId: req.user.organizationId,
       commitSha: Math.random().toString(16).slice(2, 9),
       branch: body.branch ?? 'main',
       author: body.author ?? 'dev@example.com',
@@ -50,21 +47,21 @@ export class PipelinesController {
   @Get()
   @ApiOperation({ summary: 'List pipeline runs for an organization' })
   findAll(
-    @Query('organizationId') organizationId: string,
+    @Request() req: any,
     @Query('projectId') projectId?: string,
   ) {
-    return this.service.findAll(organizationId, projectId);
+    return this.service.findAll(req.user.organizationId, projectId);
   }
 
   @Get('stats')
   @ApiOperation({ summary: 'Get pipeline statistics' })
-  getStats(@Query('organizationId') organizationId: string) {
-    return this.service.getStats(organizationId);
+  getStats(@Request() req: any) {
+    return this.service.getStats(req.user.organizationId);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific pipeline run' })
-  findOne(@Param('id') id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id') id: string, @Request() req: any) {
+    return this.service.findOne(id, req.user.organizationId);
   }
 }

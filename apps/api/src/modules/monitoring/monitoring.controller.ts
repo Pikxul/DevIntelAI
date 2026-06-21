@@ -58,48 +58,48 @@ export class MonitoringController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Get active anomaly alerts' })
-  getActiveAlerts() {
-    return this.service.getActiveAlerts();
+  getActiveAlerts(@Req() req: any) {
+    return this.service.getActiveAlerts(req.user.organizationId);
   }
 
   @Get('anomalies')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'List detected anomalies' })
-  getAnomalies(@Query('deploymentId') deploymentId?: string, @Query('limit') limit?: string) {
-    return this.service.getAnomalies(deploymentId, limit ? parseInt(limit) : 20);
+  getAnomalies(@Req() req: any, @Query('deploymentId') deploymentId?: string, @Query('limit') limit?: string) {
+    return this.service.getAnomalies(req.user.organizationId, deploymentId, limit ? parseInt(limit) : 20);
   }
 
   @Get('incidents')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'List incident alerts' })
-  getIncidents(@Query('projectId') projectId?: string) {
-    return this.incidentsService.getIncidents(projectId);
+  getIncidents(@Req() req: any, @Query('projectId') projectId?: string) {
+    return this.incidentsService.getIncidents(req.user.organizationId, projectId);
   }
 
   @Get('incidents/stats')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Get incident aggregate statistics' })
-  getIncidentStats() {
-    return this.incidentsService.getStats();
+  getIncidentStats(@Req() req: any) {
+    return this.incidentsService.getStats(req.user.organizationId);
   }
 
   @Get('incidents/:id/rca')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Get RCA for an incident' })
-  getRCA(@Param('id') incidentId: string) {
-    return this.incidentsService.getRCA(incidentId);
+  getRCA(@Param('id') incidentId: string, @Req() req: any) {
+    return this.incidentsService.getRCA(incidentId, req.user.organizationId);
   }
 
   @Get('incidents/:id/timeline')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'))
   @ApiOperation({ summary: 'Get timeline events for an incident' })
-  getIncidentTimeline(@Param('id') incidentId: string) {
-    return this.incidentsService.getTimeline(incidentId);
+  getIncidentTimeline(@Param('id') incidentId: string, @Req() req: any) {
+    return this.incidentsService.getTimeline(incidentId, req.user.organizationId);
   }
 
   @Put('incidents/:id/status')
@@ -109,8 +109,9 @@ export class MonitoringController {
   updateIncidentStatus(
     @Param('id') incidentId: string,
     @Body() body: { status: string },
+    @Req() req: any
   ) {
-    return this.incidentsService.updateStatus(incidentId, body.status);
+    return this.incidentsService.updateStatus(incidentId, body.status, req.user.organizationId);
   }
 }
 

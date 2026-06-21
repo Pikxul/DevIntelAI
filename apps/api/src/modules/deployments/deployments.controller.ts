@@ -28,7 +28,7 @@ export class DeploymentsController {
   @Roles('developer', 'manager', 'admin', 'owner')
   @ApiOperation({ summary: 'Rollback a deployment' })
   async rollback(@Param('id') id: string, @Body() body: { reason: string }, @Request() req: any) {
-    const deployment = await this.service.rollback(id, body.reason);
+    const deployment = await this.service.rollback(id, body.reason, req.user.organizationId);
     const user = req.user;
     if (user && deployment) {
       await this.governanceService.addAuditLog({
@@ -47,21 +47,21 @@ export class DeploymentsController {
   @Get()
   @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
   @ApiOperation({ summary: 'List recent deployments' })
-  findAll() {
-    return this.service.findAll();
+  findAll(@Request() req: any) {
+    return this.service.findAll(req.user.organizationId);
   }
 
   @Get('stats')
   @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
   @ApiOperation({ summary: 'Get deployment aggregate statistics' })
-  getStats() {
-    return this.service.getStats();
+  getStats(@Request() req: any) {
+    return this.service.getStats(req.user.organizationId);
   }
 
   @Get(':id')
   @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
   @ApiOperation({ summary: 'Get deployment details' })
-  findOne(@Param('id') id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id') id: string, @Request() req: any) {
+    return this.service.findOne(id, req.user.organizationId);
   }
 }

@@ -35,7 +35,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       if (account) {
         token.provider = account.provider; // 'github' | 'google' | 'credentials'
-        token.organizationId = 'default-org'; // will be replaced when we add multi-tenancy
         token.role = 'admin';
         
         if (account.provider === 'github' || account.provider === 'google' || account.provider === 'credentials') {

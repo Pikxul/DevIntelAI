@@ -30,7 +30,7 @@ export class AIReviewService {
     this.logger.log(`Starting AI review for pipeline ${pipelineRunId}`);
 
     const diffHash = crypto.createHash('sha256').update(diff).digest('hex');
-    const cacheKey = `ai-cache:review:${diffHash}`;
+    const cacheKey = `org:${organizationId}:ai-cache:review:${diffHash}`;
 
     try {
       const cached = await this.redis.get(cacheKey);
@@ -142,16 +142,30 @@ export class AIReviewService {
     return saved;
   }
 
-  async findByPipelineRun(pipelineRunId: string): Promise<AIReviewResult | null> {
-    return this.repo.findOne({ where: { pipelineRunId } });
+  async findByPipelineRun(pipelineRunId: string, organizationId: string): Promise<AIReviewResult | null> {
+    return this.repo.createQueryBuilder('a')
+      .innerJoin('pipeline_runs', 'p', 'a.pipelineRunId = p.id')
+      .where('a.pipelineRunId = :pipelineRunId', { pipelineRunId })
+      .andWhere('p.organizationId = :organizationId', { organizationId })
+      .getOne();
   }
 
-  async findAll(limit = 20): Promise<AIReviewResult[]> {
-    return this.repo.find({ order: { createdAt: 'DESC' }, take: limit });
+  async findAll(organizationId: string, limit = 20): Promise<AIReviewResult[]> {
+    return this.repo.createQueryBuilder('a')
+      .innerJoin('pipeline_runs', 'p', 'a.pipelineRunId = p.id')
+      .where('p.organizationId = :organizationId', { organizationId })
+      .orderBy('a.createdAt', 'DESC')
+      .take(limit)
+      .getMany();
   }
 
-  async getReviewStats() {
-    const reviews = await this.repo.find({ take: 100, order: { createdAt: 'DESC' } });
+  async getReviewStats(organizationId: string) {
+    const reviews = await this.repo.createQueryBuilder('a')
+      .innerJoin('pipeline_runs', 'p', 'a.pipelineRunId = p.id')
+      .where('p.organizationId = :organizationId', { organizationId })
+      .orderBy('a.createdAt', 'DESC')
+      .take(100)
+      .getMany();
     const approved = reviews.filter((r) => r.approved).length;
     const blocked = reviews.filter((r) => !r.approved).length;
     const totalCost = reviews.reduce((acc, r) => acc + Number(r.costUsd), 0);

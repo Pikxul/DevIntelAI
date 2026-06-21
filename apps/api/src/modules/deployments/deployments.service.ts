@@ -50,8 +50,8 @@ export class DeploymentsService {
     return saved;
   }
 
-  async rollback(deploymentId: string, reason: string): Promise<Deployment | null> {
-    const deployment = await this.repo.findOne({ where: { id: deploymentId } });
+  async rollback(deploymentId: string, reason: string, organizationId: string): Promise<Deployment | null> {
+    const deployment = await this.findOne(deploymentId, organizationId);
     if (!deployment || !deployment.previousImageTag) {
       this.logger.warn(`Cannot rollback deployment ${deploymentId}: no previous image`);
       return null;
@@ -64,7 +64,7 @@ export class DeploymentsService {
       rollbackReason: reason,
     });
 
-    return this.repo.findOne({ where: { id: deploymentId } });
+    return this.findOne(deploymentId, organizationId);
   }
 
   async findLatestForProject(projectId: string): Promise<Deployment | null> {
@@ -76,16 +76,30 @@ export class DeploymentsService {
       .getOne();
   }
 
-  async findAll(limit = 20): Promise<Deployment[]> {
-    return this.repo.find({ order: { startedAt: 'DESC' }, take: limit });
+  async findAll(organizationId: string, limit = 20): Promise<Deployment[]> {
+    return this.repo.createQueryBuilder('d')
+      .innerJoin('pipeline_runs', 'p', 'd.pipelineRunId = p.id')
+      .where('p.organizationId = :organizationId', { organizationId })
+      .orderBy('d.startedAt', 'DESC')
+      .take(limit)
+      .getMany();
   }
 
-  async findOne(id: string): Promise<Deployment | null> {
-    return this.repo.findOne({ where: { id } });
+  async findOne(id: string, organizationId: string): Promise<Deployment | null> {
+    return this.repo.createQueryBuilder('d')
+      .innerJoin('pipeline_runs', 'p', 'd.pipelineRunId = p.id')
+      .where('d.id = :id', { id })
+      .andWhere('p.organizationId = :organizationId', { organizationId })
+      .getOne();
   }
 
-  async getStats() {
-    const deployments = await this.repo.find({ take: 200, order: { startedAt: 'DESC' } });
+  async getStats(organizationId: string) {
+    const deployments = await this.repo.createQueryBuilder('d')
+      .innerJoin('pipeline_runs', 'p', 'd.pipelineRunId = p.id')
+      .where('p.organizationId = :organizationId', { organizationId })
+      .orderBy('d.startedAt', 'DESC')
+      .take(200)
+      .getMany();
     const total = deployments.length;
     const succeeded = deployments.filter(d => d.status === 'success').length;
     const failed = deployments.filter(d => d.status === 'failed').length;

@@ -24,7 +24,7 @@ export async function GET() {
     sub: session.user.id,
     email: session.user.email ?? '',
     name: session.user.name ?? '',
-    org: (session as any).organizationId ?? 'default-org',
+    org: (session as any).organizationId ?? '',
     role: (session as any).role ?? 'user',
   })
     .setProtectedHeader({ alg: 'HS256' })

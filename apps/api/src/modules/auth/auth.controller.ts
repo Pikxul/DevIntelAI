@@ -186,19 +186,7 @@ export class AuthController {
       githubAccessToken = body.githubAccessToken || undefined;
     }
 
-    // 1. Ensure the default organization exists
-    const orgSlug = 'default-org';
-    let org = await this.orgRepo.findOne({ where: { slug: orgSlug } });
-    if (!org) {
-      org = this.orgRepo.create({
-        name: 'Default Organization',
-        slug: orgSlug,
-      });
-      org = await this.orgRepo.save(org);
-    }
-    const orgId = org.id;
-
-    // 2. Find user by email or githubId
+    // 1. Find user by email or githubId
     let user = await this.userRepo.findOne({
       where: [
         { githubId },
@@ -207,6 +195,14 @@ export class AuthController {
     });
 
     if (!user) {
+      // Create a unique personal organization for this new user
+      const orgSlug = `org-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`.toLowerCase();
+      let org = this.orgRepo.create({
+        name: `${name}'s Organization`,
+        slug: orgSlug,
+      });
+      org = await this.orgRepo.save(org);
+
       // Create user
       user = this.userRepo.create({
         email,
@@ -216,7 +212,7 @@ export class AuthController {
         githubUsername,
         githubAccessToken,
         provider: 'github',
-        organizationId: orgId,
+        organizationId: org.id,
         role: 'admin',
       });
       await this.userRepo.save(user);
@@ -289,32 +285,27 @@ export class AuthController {
       throw new BadRequestException('Google user ID and email are required');
     }
 
-    // 1. Ensure the default organization exists
-    const orgSlug = 'default-org';
-    let org = await this.orgRepo.findOne({ where: { slug: orgSlug } });
-    if (!org) {
-      org = this.orgRepo.create({
-        name: 'Default Organization',
-        slug: orgSlug,
-      });
-      org = await this.orgRepo.save(org);
-    }
-    const orgId = org.id;
-
     const email = body.email;
     const name = body.name || 'Google User';
     const avatarUrl = body.avatarUrl || '';
 
-    // 2. Find or create user
+    // 1. Find or create user
     let user = await this.userRepo.findOne({ where: { email } });
 
     if (!user) {
+      const orgSlug = `org-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`.toLowerCase();
+      let org = this.orgRepo.create({
+        name: `${name}'s Organization`,
+        slug: orgSlug,
+      });
+      org = await this.orgRepo.save(org);
+
       user = this.userRepo.create({
         email,
         name,
         avatarUrl,
         provider: 'google',
-        organizationId: orgId,
+        organizationId: org.id,
         role: 'admin',
       });
       await this.userRepo.save(user);
@@ -363,24 +354,20 @@ export class AuthController {
       throw new BadRequestException('Email is required');
     }
 
-    const orgSlug = 'default-org';
-    let org = await this.orgRepo.findOne({ where: { slug: orgSlug } });
-    if (!org) {
-      org = this.orgRepo.create({
-        name: 'Default Organization',
+    let user = await this.userRepo.findOne({ where: { email: body.email } });
+    if (!user) {
+      const orgSlug = `org-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`.toLowerCase();
+      let org = this.orgRepo.create({
+        name: `${body.name || 'Dev User'}'s Organization`,
         slug: orgSlug,
       });
       org = await this.orgRepo.save(org);
-    }
-    const orgId = org.id;
 
-    let user = await this.userRepo.findOne({ where: { email: body.email } });
-    if (!user) {
       user = this.userRepo.create({
         email: body.email,
         name: body.name || 'Dev User',
         provider: 'credentials',
-        organizationId: orgId,
+        organizationId: org.id,
         role: 'admin',
       });
       await this.userRepo.save(user);
@@ -435,7 +422,7 @@ export class AuthController {
   async samlCallback(@Body() body: any) {
     let email: string = body.email;
     let name: string = body.name || 'SSO User';
-    let organizationId: string = body.organizationId || 'default-org';
+    let organizationId: string = body.organizationId;
 
     if (body.SAMLResponse) {
       try {
@@ -460,6 +447,10 @@ export class AuthController {
     }
 
     const domain = email.split('@')[1].toLowerCase();
+
+    if (!organizationId) {
+      organizationId = `org-${domain.replace(/[^a-z0-9]/g, '-')}`;
+    }
 
     let org = await this.orgRepo.findOne({ where: { id: organizationId } });
     if (!org) {
@@ -523,7 +514,7 @@ export class AuthController {
   async oidcCallback(@Body() body: any) {
     let email: string = body.email;
     let name: string = body.name || 'OIDC User';
-    let organizationId: string = body.organizationId || 'default-org';
+    let organizationId: string = body.organizationId;
 
     if (body.id_token) {
       try {
@@ -545,6 +536,10 @@ export class AuthController {
     }
 
     const domain = email.split('@')[1].toLowerCase();
+
+    if (!organizationId) {
+      organizationId = `org-${domain.replace(/[^a-z0-9]/g, '-')}`;
+    }
 
     let org = await this.orgRepo.findOne({ where: { id: organizationId } });
     if (!org) {

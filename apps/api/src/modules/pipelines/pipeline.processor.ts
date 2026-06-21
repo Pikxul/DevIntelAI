@@ -190,7 +190,7 @@ export class PipelineProcessor {
       let projectName = projectId || 'Unknown Project';
       if (projectId) {
         try {
-          const project = await this.projectsService.findOne(projectId);
+          const project = await this.projectsService.findOne(projectId, organizationId);
           if (project) projectName = project.name;
         } catch { /* ignore */ }
       }

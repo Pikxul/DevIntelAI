@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AIReviewService } from './ai-review.service';
@@ -12,20 +12,20 @@ export class AIReviewController {
 
   @Get()
   @ApiOperation({ summary: 'List recent AI reviews' })
-  findAll(@Query('limit') limit?: string) {
-    return this.service.findAll(limit ? parseInt(limit) : 20);
+  findAll(@Request() req: any, @Query('limit') limit?: string) {
+    return this.service.findAll(req.user.organizationId, limit ? parseInt(limit) : 20);
   }
 
   @Get('stats')
   @ApiOperation({ summary: 'Get AI review aggregate statistics' })
-  getStats() {
-    return this.service.getReviewStats();
+  getStats(@Request() req: any) {
+    return this.service.getReviewStats(req.user.organizationId);
   }
 
   @Get('pipeline/:pipelineRunId')
   @ApiOperation({ summary: 'Get AI review for a specific pipeline run' })
-  findByPipeline(@Param('pipelineRunId') pipelineRunId: string) {
-    return this.service.findByPipelineRun(pipelineRunId);
+  findByPipeline(@Param('pipelineRunId') pipelineRunId: string, @Request() req: any) {
+    return this.service.findByPipelineRun(pipelineRunId, req.user.organizationId);
   }
 
   @Post('inline')

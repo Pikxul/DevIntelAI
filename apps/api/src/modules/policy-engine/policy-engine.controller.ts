@@ -20,15 +20,15 @@ export class PolicyEngineController {
   @Get()
   @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
   @ApiOperation({ summary: 'List policies for an organization' })
-  getPolicies(@Query('organizationId') organizationId: string) {
-    return this.service.getPolicies(organizationId);
+  getPolicies(@Request() req: any) {
+    return this.service.getPolicies(req.user.organizationId);
   }
 
   @Post()
   @Roles('manager', 'admin', 'owner')
   @ApiOperation({ summary: 'Create a new pipeline policy' })
   async createPolicy(@Body() dto: Partial<PipelinePolicy>, @Request() req: any) {
-    const policy = await this.service.createPolicy(dto);
+    const policy = await this.service.createPolicy({ ...dto, organizationId: req.user.organizationId });
     const user = req.user;
     if (user) {
       await this.governanceService.addAuditLog({
@@ -48,7 +48,7 @@ export class PolicyEngineController {
   @Roles('manager', 'admin', 'owner')
   @ApiOperation({ summary: 'Update a pipeline policy' })
   async updatePolicy(@Param('id') id: string, @Body() dto: Partial<PipelinePolicy>, @Request() req: any) {
-    const policy = await this.service.updatePolicy(id, dto);
+    const policy = await this.service.updatePolicy(id, dto, req.user.organizationId);
     const user = req.user;
     if (user && policy) {
       await this.governanceService.addAuditLog({
@@ -68,12 +68,12 @@ export class PolicyEngineController {
   @Roles('manager', 'admin', 'owner')
   @ApiOperation({ summary: 'Toggle a policy enabled/disabled' })
   async togglePolicy(@Param('id') id: string, @Request() req: any) {
-    const policies = await this.service.getPolicies('');
+    const policies = await this.service.getPolicies(req.user.organizationId);
     const policy = policies.find(p => p.id === id);
     if (!policy) return null;
 
     const newStatus = !policy.enabled;
-    const updated = await this.service.updatePolicy(id, { enabled: newStatus });
+    const updated = await this.service.updatePolicy(id, { enabled: newStatus }, req.user.organizationId);
     
     const user = req.user;
     if (user && updated) {
@@ -94,10 +94,10 @@ export class PolicyEngineController {
   @Roles('manager', 'admin', 'owner')
   @ApiOperation({ summary: 'Delete a pipeline policy' })
   async deletePolicy(@Param('id') id: string, @Request() req: any) {
-    const policies = await this.service.getPolicies('');
+    const policies = await this.service.getPolicies(req.user.organizationId);
     const policy = policies.find(p => p.id === id);
     
-    await this.service.deletePolicy(id);
+    await this.service.deletePolicy(id, req.user.organizationId);
     
     const user = req.user;
     if (user && policy) {

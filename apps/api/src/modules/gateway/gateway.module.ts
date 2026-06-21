@@ -32,9 +32,9 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
       try {
         // Just broadcast stats for 'default-org' for now (or loop active orgs)
         const pipelineStats = await this.pipelinesService.getStats('default-org');
-        const aiStats = await this.aiReviewService.getReviewStats();
+        const aiStats = await this.aiReviewService.getReviewStats('default-org');
 
-        this.server.emit('dashboard:stats', { pipelineStats, aiStats });
+        this.server.to('org:default-org').emit('dashboard:stats', { pipelineStats, aiStats });
       } catch (err) {
         this.logger.error(`Failed to broadcast stats: ${err.message}`);
       }
@@ -55,7 +55,12 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
       const secret = this.configService.get<string>('NEXTAUTH_SECRET') || this.configService.get<string>('JWT_SECRET');
       const payload = this.jwtService.verify(token, { secret });
 
-      this.logger.log(`Client connected: ${client.id} (User: ${payload.email})`);
+      const orgId = payload.organizationId || payload.org;
+      if (orgId) {
+        client.join(`org:${orgId}`);
+      }
+
+      this.logger.log(`Client connected: ${client.id} (User: ${payload.email}, Org: ${orgId})`);
     } catch (err) {
       this.logger.warn(`Unauthorized client connection attempt: ${client.id}`);
       client.disconnect();
@@ -80,15 +85,15 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     });
   }
 
-  emitAnomalyAlert(payload: unknown) {
-    this.server.emit('anomaly:detected', {
+  emitAnomalyAlert(organizationId: string, payload: unknown) {
+    this.server.to(`org:${organizationId}`).emit('anomaly:detected', {
       payload,
       timestamp: new Date().toISOString(),
     });
   }
 
-  emitGlobalEvent(event: string, payload: unknown) {
-    this.server.emit(event, { payload, timestamp: new Date().toISOString() });
+  emitGlobalEvent(organizationId: string, event: string, payload: unknown) {
+    this.server.to(`org:${organizationId}`).emit(event, { payload, timestamp: new Date().toISOString() });
   }
 }
 

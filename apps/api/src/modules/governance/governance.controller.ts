@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Body, Param, Query, UseGuards, Res } from '@nestjs/common';
+import { Controller, Get, Put, Post, Body, Param, Query, UseGuards, Res, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
@@ -18,8 +18,8 @@ export class GovernanceController {
   @Get('members')
   @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
   @ApiOperation({ summary: 'List organization members' })
-  getMembers(@Query('organizationId') organizationId: string) {
-    return this.service.getMembers(organizationId);
+  getMembers(@Request() req: any) {
+    return this.service.getMembers(req.user.organizationId);
   }
 
   @Put('members/:id/role')
@@ -38,20 +38,21 @@ export class GovernanceController {
   @Roles('manager', 'admin', 'owner')
   @ApiOperation({ summary: 'Get audit logs for organization' })
   getAuditLogs(
-    @Query('organizationId') organizationId: string,
+    @Request() req: any,
     @Query('limit') limit?: string,
   ) {
-    return this.service.getAuditLogs(organizationId, limit ? parseInt(limit) : 50);
+    return this.service.getAuditLogs(req.user.organizationId, limit ? parseInt(limit) : 50);
   }
 
   @Get('audit-logs/export')
   @Roles('manager', 'admin', 'owner')
   @ApiOperation({ summary: 'Export audit logs in CSV or JSON format for SOC2/ISO27001 compliance' })
   async exportAuditLogs(
-    @Query('organizationId') organizationId: string,
+    @Request() req: any,
     @Query('format') format: 'csv' | 'json',
     @Res() res: Response,
   ) {
+    const organizationId = req.user.organizationId;
     const logs = await this.service.getAuditLogs(organizationId, 1000);
 
     if (format === 'csv') {
@@ -87,17 +88,21 @@ export class GovernanceController {
   @Get('approval-requests')
   @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
   @ApiOperation({ summary: 'List pending approval requests' })
-  getApprovalRequests(@Query('organizationId') organizationId: string) {
-    return this.service.getApprovalRequests(organizationId);
+  getApprovalRequests(@Request() req: any) {
+    return this.service.getApprovalRequests(req.user.organizationId);
   }
 
   @Post('approval-requests')
   @Roles('developer', 'manager', 'admin', 'owner')
   @ApiOperation({ summary: 'Create approval request for high-risk pipeline' })
   createApprovalRequest(
-    @Body() body: { pipelineRunId: string; projectId: string; organizationId: string; requestedBy: string },
+    @Body() body: { pipelineRunId: string; projectId: string; requestedBy: string },
+    @Request() req: any,
   ) {
-    return this.service.createApprovalRequest(body);
+    return this.service.createApprovalRequest({
+      ...body,
+      organizationId: req.user.organizationId,
+    });
   }
 
   @Post('approval-requests/:id/approve')

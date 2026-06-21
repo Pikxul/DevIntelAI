@@ -51,7 +51,7 @@ export class PipelinesService {
 
     // Broadcast new pipeline run started
     try {
-      this.eventsGateway.emitGlobalEvent('pipeline:started', saved);
+      this.eventsGateway.emitGlobalEvent(saved.organizationId, 'pipeline:started', saved);
     } catch (err) {
       // Ignore websocket failures gracefully
     }
@@ -81,8 +81,8 @@ export class PipelinesService {
     return this.repo.find({ where, order: { createdAt: 'DESC' }, take: 50 });
   }
 
-  async findOne(id: string): Promise<PipelineRun | null> {
-    return this.repo.findOne({ where: { id } });
+  async findOne(id: string, organizationId: string): Promise<PipelineRun | null> {
+    return this.repo.findOne({ where: { id, organizationId } });
   }
 
   async updateStage(
@@ -129,7 +129,7 @@ export class PipelinesService {
       });
       // Also broadcast global dashboard update
       const pipelineStats = await this.getStats(run.organizationId);
-      this.eventsGateway.emitGlobalEvent('dashboard:stats:update', { pipelineStats });
+      this.eventsGateway.emitGlobalEvent(run.organizationId, 'dashboard:stats:update', { pipelineStats });
     } catch (err) {
       // Ignore websocket failures gracefully
     }
@@ -144,7 +144,7 @@ export class PipelinesService {
       this.eventsGateway.emitPipelineUpdate(id, { pipelineRunId: id, status });
       if (run) {
         const pipelineStats = await this.getStats(run.organizationId);
-        this.eventsGateway.emitGlobalEvent('dashboard:stats:update', { pipelineStats });
+        this.eventsGateway.emitGlobalEvent('default-org', 'dashboard:stats:update', { pipelineStats });
       }
     } catch (err) {
       // Ignore websocket failures gracefully
