@@ -5,7 +5,18 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtStrategy } from './jwt.strategy';
 import { AuthController } from './auth.controller';
-import { User, Organization, SSOConfiguration } from '../../entities';
+import { PermissionsService } from './permissions.service';
+import { PermissionsGuard } from './permissions.guard';
+import {
+  User,
+  Organization,
+  SSOConfiguration,
+  RoleEntity,
+  PermissionEntity,
+  RolePermissionEntity,
+  AuditLogEntity,
+  InvitationEntity,
+} from '../../entities';
 
 @Module({
   imports: [
@@ -18,10 +29,20 @@ import { User, Organization, SSOConfiguration } from '../../entities';
         signOptions: { expiresIn: '7d' },
       }),
     }),
-    TypeOrmModule.forFeature([User, Organization, SSOConfiguration]),
+    TypeOrmModule.forFeature([
+      User,
+      Organization,
+      SSOConfiguration,
+      RoleEntity,
+      PermissionEntity,
+      RolePermissionEntity,
+      AuditLogEntity,
+      InvitationEntity,
+    ]),
   ],
   controllers: [AuthController],
-  providers: [JwtStrategy],
-  exports: [PassportModule, JwtModule],
+  providers: [JwtStrategy, PermissionsService, PermissionsGuard],
+  exports: [PassportModule, JwtModule, PermissionsService, PermissionsGuard],
 })
 export class AuthModule {}
+

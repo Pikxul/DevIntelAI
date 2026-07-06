@@ -3,12 +3,12 @@ import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
 import { GovernanceService } from './governance.service';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
+import { RequirePermission } from '../auth/permissions.decorator';
+import { PermissionsGuard } from '../auth/permissions.guard';
 
 @ApiTags('governance')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @Controller('governance')
 export class GovernanceController {
   constructor(private readonly service: GovernanceService) {}
@@ -16,14 +16,15 @@ export class GovernanceController {
   // ─── Members ─────────────────────────────────────────────────────────────────
 
   @Get('members')
-  @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
+  // We can let any authenticated user view members (or use a broad permission)
+  // Assuming implicit read for members.
   @ApiOperation({ summary: 'List organization members' })
   getMembers(@Request() req: any) {
     return this.service.getMembers(req.user.organizationId);
   }
 
   @Put('members/:id/role')
-  @Roles('admin', 'owner')
+  @RequirePermission('user:assign_role')
   @ApiOperation({ summary: 'Update member role' })
   updateRole(
     @Param('id') id: string,
@@ -35,7 +36,7 @@ export class GovernanceController {
   // ─── Audit Logs ───────────────────────────────────────────────────────────────
 
   @Get('audit-logs')
-  @Roles('manager', 'admin', 'owner')
+  @RequirePermission('audit_log:view')
   @ApiOperation({ summary: 'Get audit logs for organization' })
   getAuditLogs(
     @Request() req: any,
@@ -45,7 +46,7 @@ export class GovernanceController {
   }
 
   @Get('audit-logs/export')
-  @Roles('manager', 'admin', 'owner')
+  @RequirePermission('audit_log:view')
   @ApiOperation({ summary: 'Export audit logs in CSV or JSON format for SOC2/ISO27001 compliance' })
   async exportAuditLogs(
     @Request() req: any,
@@ -86,14 +87,14 @@ export class GovernanceController {
   // ─── Approval Requests ────────────────────────────────────────────────────────
 
   @Get('approval-requests')
-  @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
+  @RequirePermission('pipeline:view')
   @ApiOperation({ summary: 'List pending approval requests' })
   getApprovalRequests(@Request() req: any) {
     return this.service.getApprovalRequests(req.user.organizationId);
   }
 
   @Post('approval-requests')
-  @Roles('developer', 'manager', 'admin', 'owner')
+  @RequirePermission('pipeline:trigger')
   @ApiOperation({ summary: 'Create approval request for high-risk pipeline' })
   createApprovalRequest(
     @Body() body: { pipelineRunId: string; projectId: string; requestedBy: string },
@@ -106,7 +107,7 @@ export class GovernanceController {
   }
 
   @Post('approval-requests/:id/approve')
-  @Roles('manager', 'admin', 'owner')
+  @RequirePermission('approval:review')
   @ApiOperation({ summary: 'Approve a pipeline deployment request' })
   approveRequest(
     @Param('id') id: string,
@@ -116,7 +117,7 @@ export class GovernanceController {
   }
 
   @Post('approval-requests/:id/reject')
-  @Roles('manager', 'admin', 'owner')
+  @RequirePermission('approval:review')
   @ApiOperation({ summary: 'Reject a pipeline deployment request' })
   rejectRequest(
     @Param('id') id: string,

@@ -3,13 +3,13 @@ import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { DeploymentsService } from './deployments.service';
 import type { DeploymentTarget } from '@aidevops/shared-types';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
+import { RequirePermission } from '../auth/permissions.decorator';
+import { PermissionsGuard } from '../auth/permissions.guard';
 import { GovernanceService } from '../governance/governance.service';
 
 @ApiTags('deployments')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @Controller('deployments')
 export class DeploymentsController {
   constructor(
@@ -18,14 +18,14 @@ export class DeploymentsController {
   ) {}
 
   @Post()
-  @Roles('developer', 'manager', 'admin', 'owner')
+  @RequirePermission('pipeline:trigger')
   @ApiOperation({ summary: 'Trigger a deployment' })
   deploy(@Body() body: { pipelineRunId: string; target: DeploymentTarget; imageTag: string; previousImageTag?: string }) {
     return this.service.deploy(body);
   }
 
   @Post(':id/rollback')
-  @Roles('developer', 'manager', 'admin', 'owner')
+  @RequirePermission('deployment:rollback')
   @ApiOperation({ summary: 'Rollback a deployment' })
   async rollback(@Param('id') id: string, @Body() body: { reason: string }, @Request() req: any) {
     const deployment = await this.service.rollback(id, body.reason, req.user.organizationId);
@@ -45,21 +45,21 @@ export class DeploymentsController {
   }
 
   @Get()
-  @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
+  @RequirePermission('deployment:view')
   @ApiOperation({ summary: 'List recent deployments' })
   findAll(@Request() req: any) {
     return this.service.findAll(req.user.organizationId);
   }
 
   @Get('stats')
-  @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
+  @RequirePermission('deployment:view')
   @ApiOperation({ summary: 'Get deployment aggregate statistics' })
   getStats(@Request() req: any) {
     return this.service.getStats(req.user.organizationId);
   }
 
   @Get(':id')
-  @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
+  @RequirePermission('deployment:view')
   @ApiOperation({ summary: 'Get deployment details' })
   findOne(@Param('id') id: string, @Request() req: any) {
     return this.service.findOne(id, req.user.organizationId);

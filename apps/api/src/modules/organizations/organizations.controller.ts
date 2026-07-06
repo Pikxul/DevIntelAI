@@ -18,8 +18,10 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { DataSource, Repository } from 'typeorm';
-import { Organization, User } from '../../entities';
+import { User, Organization } from '../../entities';
 import { SkipTenantCheck } from '../auth/skip-tenant-check.decorator';
+import { RequirePermission } from '../auth/permissions.decorator';
+import { PermissionsGuard } from '../auth/permissions.guard';
 
 class UpdateOrgDto {
   @IsOptional()
@@ -55,7 +57,7 @@ class CreateOrgDto {
 @ApiTags('organizations')
 @ApiBearerAuth()
 @Controller('organizations')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @SkipTenantCheck()
 export class OrganizationsController {
   private readonly logger = new Logger(OrganizationsController.name);
@@ -83,6 +85,7 @@ export class OrganizationsController {
   }
 
   @Put(':idOrSlug')
+  @RequirePermission('org:settings')
   @ApiOperation({ summary: 'Update organization name, slug, or githubInstallationId' })
   async update(@Param('idOrSlug') idOrSlug: string, @Body() body: UpdateOrgDto, @Request() req: any) {
     const org = await this.orgRepo.findOne({ 

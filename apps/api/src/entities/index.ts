@@ -16,13 +16,15 @@ export class User {
   @Column({ unique: true }) email: string;
   @Column() name: string;
   @Column({ nullable: true }) avatarUrl: string;
+  @Column({ nullable: true }) password?: string;
   @Column() organizationId: string;
   @Column({ default: 'developer' }) role: string;
   @Column({ nullable: true }) githubId: string;
   @Column({ nullable: true }) githubUsername: string;
   @Column({ nullable: true }) githubAccessToken: string;  // GitHub OAuth token for listing user's repos
-  @Column({ default: 'credentials' }) provider: string; // 'github' | 'google' | 'credentials'
+  @Column({ default: 'credentials' }) provider: string; // 'github' | 'google' | 'credentials' | 'sso'
   @Column({ default: false }) onboardingCompleted: boolean;   // Tracks completion of onboarding wizard
+  @Column({ nullable: true }) invitedBy?: string;
   @CreateDateColumn() createdAt: Date;
 }
 
@@ -330,6 +332,19 @@ export class AuditArchiveLog {
 }
 
 export * from './PipelinePolicy';
+
+@Entity('invitations')
+export class InvitationEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column() email: string;
+  @Column() organizationId: string;
+  @Column() role: string;
+  @Column() token: string;
+  @Column() invitedBy: string;
+  @Column({ default: 'pending' }) status: string; // 'pending' | 'accepted' | 'expired'
+  @CreateDateColumn() createdAt: Date;
+  @Column({ type: 'timestamp', nullable: true }) expiresAt: Date;
+}
 
 
 

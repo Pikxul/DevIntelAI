@@ -8,6 +8,8 @@ import { Request } from 'express';
 import * as crypto from 'crypto';
 import type { MetricSnapshot } from '@aidevops/shared-types';
 import { SkipTenantCheck } from '../auth/skip-tenant-check.decorator';
+import { RequirePermission } from '../auth/permissions.decorator';
+import { PermissionsGuard } from '../auth/permissions.guard';
 
 @ApiTags('monitoring')
 @Controller('monitoring')
@@ -56,7 +58,8 @@ export class MonitoringController {
 
   @Get('alerts/active')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermission('alert:view')
   @ApiOperation({ summary: 'Get active anomaly alerts' })
   getActiveAlerts(@Req() req: any) {
     return this.service.getActiveAlerts(req.user.organizationId);
@@ -64,7 +67,8 @@ export class MonitoringController {
 
   @Get('anomalies')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermission('alert:view')
   @ApiOperation({ summary: 'List detected anomalies' })
   getAnomalies(@Req() req: any, @Query('deploymentId') deploymentId?: string, @Query('limit') limit?: string) {
     return this.service.getAnomalies(req.user.organizationId, deploymentId, limit ? parseInt(limit) : 20);
@@ -72,7 +76,8 @@ export class MonitoringController {
 
   @Get('incidents')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermission('incident:view')
   @ApiOperation({ summary: 'List incident alerts' })
   getIncidents(@Req() req: any, @Query('projectId') projectId?: string) {
     return this.incidentsService.getIncidents(req.user.organizationId, projectId);
@@ -80,7 +85,8 @@ export class MonitoringController {
 
   @Get('incidents/stats')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermission('incident:view')
   @ApiOperation({ summary: 'Get incident aggregate statistics' })
   getIncidentStats(@Req() req: any) {
     return this.incidentsService.getStats(req.user.organizationId);
@@ -88,7 +94,8 @@ export class MonitoringController {
 
   @Get('incidents/:id/rca')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermission('incident:view')
   @ApiOperation({ summary: 'Get RCA for an incident' })
   getRCA(@Param('id') incidentId: string, @Req() req: any) {
     return this.incidentsService.getRCA(incidentId, req.user.organizationId);
@@ -96,7 +103,8 @@ export class MonitoringController {
 
   @Get('incidents/:id/timeline')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermission('incident:view')
   @ApiOperation({ summary: 'Get timeline events for an incident' })
   getIncidentTimeline(@Param('id') incidentId: string, @Req() req: any) {
     return this.incidentsService.getTimeline(incidentId, req.user.organizationId);
@@ -104,7 +112,8 @@ export class MonitoringController {
 
   @Put('incidents/:id/status')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermission('incident:manage')
   @ApiOperation({ summary: 'Update incident status (open/investigating/resolved)' })
   updateIncidentStatus(
     @Param('id') incidentId: string,

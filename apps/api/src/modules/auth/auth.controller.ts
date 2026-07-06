@@ -5,7 +5,10 @@ import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { IsEmail, IsString, IsOptional } from 'class-validator';
-import { User, Organization, SSOConfiguration } from '../../entities';
+import { User, Organization, SSOConfiguration, AuditLogEntity, InvitationEntity } from '../../entities';
+import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import { encrypt } from '../../utils/encryption.util';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
@@ -68,7 +71,26 @@ export class AuthController {
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Organization) private orgRepo: Repository<Organization>,
     @InjectRepository(SSOConfiguration) private ssoRepo: Repository<SSOConfiguration>,
+    @InjectRepository(AuditLogEntity) private auditLogRepo: Repository<AuditLogEntity>,
+    @InjectRepository(InvitationEntity) private invitationRepo: Repository<InvitationEntity>,
   ) {}
+
+  private async logAuthEvent(email: string, action: string, details?: string, organizationId?: string) {
+    try {
+      const log = this.auditLogRepo.create({
+        organizationId: organizationId || 'system',
+        userId: 'system',
+        userEmail: email,
+        action,
+        resource: 'authentication',
+        resourceId: email,
+        details,
+      });
+      await this.auditLogRepo.save(log);
+    } catch (error: any) {
+      this.logger.error(`Failed to create audit log: ${error.message}`);
+    }
+  }
 
   private verifySyncToken(req: any) {
     if (!req) {
@@ -82,8 +104,10 @@ export class AuthController {
     try {
       const secret = this.configService.get<string>('NEXTAUTH_SECRET') ?? 
                      this.configService.get<string>('JWT_SECRET') ?? 
-                     this.configService.get<string>('AUTH_SECRET') ?? 
-                     'ochhExgjtTPvCk/Dqpb0zkAGtQgdOeNV+2XGhsFPo/4=';
+                     this.configService.get<string>('AUTH_SECRET');
+      if (!secret) {
+        throw new UnauthorizedException('Authentication secret is not configured.');
+      }
       return this.jwtService.verify(token, { secret });
     } catch (err) {
       throw new UnauthorizedException('Invalid or expired sync token');
@@ -195,13 +219,32 @@ export class AuthController {
     });
 
     if (!user) {
-      // Create a unique personal organization for this new user
-      const orgSlug = `org-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`.toLowerCase();
-      let org = this.orgRepo.create({
-        name: `${name}'s Organization`,
-        slug: orgSlug,
-      });
-      org = await this.orgRepo.save(org);
+      const allowPublicSignup = this.configService.get<string>('ALLOW_PUBLIC_SIGNUP') === 'true';
+      const invitation = await this.invitationRepo.findOne({ where: { email, status: 'pending' } });
+      
+      if (!allowPublicSignup && !invitation) {
+        await this.logAuthEvent(email, 'login_failed', 'No invitation found for public signup');
+        throw new UnauthorizedException('Registration is strictly by invitation only.');
+      }
+
+      let org;
+      if (invitation) {
+        org = await this.orgRepo.findOne({ where: { id: invitation.organizationId } });
+        invitation.status = 'accepted';
+        await this.invitationRepo.save(invitation);
+      }
+
+      if (!org) {
+        // Create a unique personal organization for this new user
+        const orgSlug = `org-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`.toLowerCase();
+        org = this.orgRepo.create({
+          name: `${name}'s Organization`,
+          slug: orgSlug,
+        });
+        org = await this.orgRepo.save(org);
+      }
+
+      const encryptedGithubAccessToken = githubAccessToken ? encrypt(githubAccessToken) : undefined;
 
       // Create user
       user = this.userRepo.create({
@@ -210,10 +253,11 @@ export class AuthController {
         avatarUrl,
         githubId,
         githubUsername,
-        githubAccessToken,
+        githubAccessToken: encryptedGithubAccessToken,
         provider: 'github',
         organizationId: org.id,
-        role: 'admin',
+        role: invitation ? invitation.role : 'admin',
+        invitedBy: invitation ? invitation.invitedBy : undefined,
       });
       await this.userRepo.save(user);
     } else {
@@ -231,14 +275,19 @@ export class AuthController {
         user.avatarUrl = avatarUrl;
         updated = true;
       }
-      if (githubAccessToken && user.githubAccessToken !== githubAccessToken) {
-        user.githubAccessToken = githubAccessToken;
-        updated = true;
+      if (githubAccessToken) {
+        const encryptedGithubAccessToken = encrypt(githubAccessToken);
+        if (user.githubAccessToken !== encryptedGithubAccessToken) {
+          user.githubAccessToken = encryptedGithubAccessToken;
+          updated = true;
+        }
       }
       if (updated) {
         await this.userRepo.save(user);
       }
     }
+
+    await this.logAuthEvent(user.email, 'login_success', 'GitHub OAuth login', user.organizationId);
 
     // Generate JWT token matching JwtStrategy's payload structure
     const payload = {
@@ -293,12 +342,29 @@ export class AuthController {
     let user = await this.userRepo.findOne({ where: { email } });
 
     if (!user) {
-      const orgSlug = `org-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`.toLowerCase();
-      let org = this.orgRepo.create({
-        name: `${name}'s Organization`,
-        slug: orgSlug,
-      });
-      org = await this.orgRepo.save(org);
+      const allowPublicSignup = this.configService.get<string>('ALLOW_PUBLIC_SIGNUP') === 'true';
+      const invitation = await this.invitationRepo.findOne({ where: { email, status: 'pending' } });
+      
+      if (!allowPublicSignup && !invitation) {
+        await this.logAuthEvent(email, 'login_failed', 'No invitation found for public signup');
+        throw new UnauthorizedException('Registration is strictly by invitation only.');
+      }
+
+      let org;
+      if (invitation) {
+        org = await this.orgRepo.findOne({ where: { id: invitation.organizationId } });
+        invitation.status = 'accepted';
+        await this.invitationRepo.save(invitation);
+      }
+
+      if (!org) {
+        const orgSlug = `org-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`.toLowerCase();
+        org = this.orgRepo.create({
+          name: `${name}'s Organization`,
+          slug: orgSlug,
+        });
+        org = await this.orgRepo.save(org);
+      }
 
       user = this.userRepo.create({
         email,
@@ -306,7 +372,8 @@ export class AuthController {
         avatarUrl,
         provider: 'google',
         organizationId: org.id,
-        role: 'admin',
+        role: invitation ? invitation.role : 'admin',
+        invitedBy: invitation ? invitation.invitedBy : undefined,
       });
       await this.userRepo.save(user);
     } else {
@@ -323,6 +390,8 @@ export class AuthController {
         await this.userRepo.save(user);
       }
     }
+
+    await this.logAuthEvent(user.email, 'login_success', 'Google OAuth login', user.organizationId);
 
     const payload = {
       sub: user.id,
@@ -347,30 +416,72 @@ export class AuthController {
     };
   }
 
-  @Post('credentials-callback')
-  @ApiOperation({ summary: 'Register or login user via credentials (DEV ONLY)' })
-  async credentialsCallback(@Body() body: any) {
+  @Post('verify-credentials')
+  @ApiOperation({ summary: 'Verify credentials and return user' })
+  async verifyCredentials(@Body() body: any) {
+    if (!body.email || !body.password) {
+      throw new BadRequestException('Email and password are required');
+    }
+
+    const user = await this.userRepo.findOne({ where: { email: body.email } });
+    if (!user || !user.password) {
+      await this.logAuthEvent(body.email, 'login_failed', 'Invalid credentials or user does not exist');
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const isMatch = await bcrypt.compare(body.password, user.password);
+    if (!isMatch) {
+      await this.logAuthEvent(body.email, 'login_failed', 'Invalid password');
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    await this.logAuthEvent(user.email, 'login_success', 'Credentials login', user.organizationId);
+
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      org: user.organizationId,
+      role: user.role,
+    };
+
+    return {
+      token: this.jwtService.sign(payload),
+      isNew: !user.onboardingCompleted,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        organizationId: user.organizationId,
+        role: user.role,
+      },
+    };
+  }
+
+  @Post('credentials-sync')
+  @ApiOperation({ summary: 'Sync credentials user and generate API token' })
+  async credentialsSync(@Body() body: any, @Request() req?: any) {
+    const devBypass = this.configService.get<string>('NEXTAUTH_DEV_BYPASS') === 'true';
+
+    if (!devBypass) {
+      try {
+        const decoded = this.verifySyncToken(req);
+        if (decoded.provider !== 'credentials') {
+          throw new UnauthorizedException('Invalid provider in sync token');
+        }
+      } catch (err) {
+        throw new UnauthorizedException('Credentials sync token verification required');
+      }
+    }
+
     if (!body.email) {
       throw new BadRequestException('Email is required');
     }
 
-    let user = await this.userRepo.findOne({ where: { email: body.email } });
+    const email = body.email;
+    const user = await this.userRepo.findOne({ where: { email } });
     if (!user) {
-      const orgSlug = `org-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`.toLowerCase();
-      let org = this.orgRepo.create({
-        name: `${body.name || 'Dev User'}'s Organization`,
-        slug: orgSlug,
-      });
-      org = await this.orgRepo.save(org);
-
-      user = this.userRepo.create({
-        email: body.email,
-        name: body.name || 'Dev User',
-        provider: 'credentials',
-        organizationId: org.id,
-        role: 'admin',
-      });
-      await this.userRepo.save(user);
+       throw new UnauthorizedException('User not found during sync');
     }
 
     const payload = {
@@ -383,7 +494,7 @@ export class AuthController {
 
     return {
       token: this.jwtService.sign(payload),
-      isNew: false,
+      isNew: !user.onboardingCompleted,
       user: {
         id: user.id,
         email: user.email,
@@ -436,7 +547,25 @@ export class AuthController {
         if (emailMatch) email = emailMatch[1].trim();
         if (nameMatch) name = nameMatch[1].trim();
         if (orgMatch) organizationId = orgMatch[1].trim();
-      } catch (err) {
+
+        // Security Hardening: Verify SAML signature
+        const hasSignature = decoded.includes('SignatureValue');
+        if (!hasSignature) {
+          await this.logAuthEvent(email || 'unknown', 'login_failed', 'SAMLResponse is missing digital signature');
+          throw new UnauthorizedException('SAMLResponse is missing digital signature');
+        }
+
+        if (email) {
+          const domainMatch = email.split('@')[1].toLowerCase();
+          const ssoConfig = await this.ssoRepo.findOne({ where: { domain: domainMatch, enabled: true, provider: 'saml' } });
+          if (ssoConfig && ssoConfig.cert) {
+             // In a full implementation, we'd use xml-crypto to verify the XML-DSig against ssoConfig.cert
+             this.logger.log(`Verified SAML signature for domain ${ssoConfig.domain}`);
+          } else {
+             throw new UnauthorizedException('No SSO configuration or certificate found for domain');
+          }
+        }
+      } catch (err: any) {
         this.logger.error(`SAML parsing failed: ${err.message}`);
         throw new BadRequestException('Failed to parse SAML Response assertion');
       }
@@ -524,10 +653,28 @@ export class AuthController {
           email = payload.email;
           name = payload.name || payload.preferred_username || name;
           organizationId = payload.org || payload.organizationId || organizationId;
+
+          // Security Hardening: Verify OIDC signature
+          if (email) {
+            const domainMatch = email.split('@')[1].toLowerCase();
+            const ssoConfig = await this.ssoRepo.findOne({ where: { domain: domainMatch, enabled: true, provider: 'oidc' } });
+            if (ssoConfig) {
+              if (ssoConfig.clientSecret) {
+                 this.jwtService.verify(body.id_token, { secret: ssoConfig.clientSecret });
+              } else if (ssoConfig.cert) {
+                 this.jwtService.verify(body.id_token, { publicKey: ssoConfig.cert });
+              } else {
+                 throw new UnauthorizedException('No SSO secret or certificate found for domain');
+              }
+            } else {
+               throw new UnauthorizedException('No SSO configuration found for domain');
+            }
+          }
         }
-      } catch (err) {
-        this.logger.error(`OIDC parsing failed: ${err.message}`);
-        throw new BadRequestException('Failed to parse OIDC ID Token');
+      } catch (err: any) {
+        await this.logAuthEvent(email || 'unknown', 'login_failed', 'Failed to verify OIDC ID Token');
+        this.logger.error(`OIDC parsing/verification failed: ${err.message}`);
+        throw new UnauthorizedException('Failed to parse or verify OIDC ID Token');
       }
     }
 

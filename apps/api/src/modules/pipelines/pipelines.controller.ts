@@ -3,20 +3,25 @@ import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PipelinesService, CreatePipelineRunDto } from './pipelines.service';
 
+import { RequirePermission } from '../auth/permissions.decorator';
+import { PermissionsGuard } from '../auth/permissions.guard';
+
 @ApiTags('pipelines')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @Controller('pipelines')
 export class PipelinesController {
   constructor(private readonly service: PipelinesService) {}
 
   @Post()
+  @RequirePermission('pipeline:trigger')
   @ApiOperation({ summary: 'Trigger a new pipeline run (also triggered by webhooks)' })
   create(@Body() dto: CreatePipelineRunDto, @Request() req: any) {
     return this.service.create({ ...dto, organizationId: req.user.organizationId });
   }
 
   @Post('trigger')
+  @RequirePermission('pipeline:trigger')
   @ApiOperation({ summary: 'Manually trigger a pipeline run' })
   triggerDemo(
     @Body() body: {
@@ -45,6 +50,7 @@ export class PipelinesController {
   }
 
   @Get()
+  @RequirePermission('pipeline:view')
   @ApiOperation({ summary: 'List pipeline runs for an organization' })
   findAll(
     @Request() req: any,
@@ -54,12 +60,14 @@ export class PipelinesController {
   }
 
   @Get('stats')
+  @RequirePermission('pipeline:view')
   @ApiOperation({ summary: 'Get pipeline statistics' })
   getStats(@Request() req: any) {
     return this.service.getStats(req.user.organizationId);
   }
 
   @Get(':id')
+  @RequirePermission('pipeline:view')
   @ApiOperation({ summary: 'Get a specific pipeline run' })
   findOne(@Param('id') id: string, @Request() req: any) {
     return this.service.findOne(id, req.user.organizationId);

@@ -19,8 +19,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       name: 'Credentials',
       credentials: { email: { label: 'Email', type: 'text' }, password: { label: 'Password', type: 'password' } },
       async authorize(credentials) {
-        // Dummy dev user
-        return { id: 'dev-user-id', name: 'Dev User', email: 'dev@acme.com', image: 'https://github.com/shadcn.png' };
+        if (!credentials?.email || !credentials?.password) return null;
+        try {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+          const res = await fetch(`${apiUrl}/api/v1/auth/verify-credentials`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: credentials.email, password: credentials.password }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            // Return user object mapped to NextAuth User format
+            return {
+              id: data.user.id,
+              name: data.user.name,
+              email: data.user.email,
+              image: data.user.avatarUrl,
+            };
+          }
+        } catch (error) {
+          console.error('Credentials authorization error:', error);
+        }
+        return null;
       }
     }),
   ],
@@ -39,7 +59,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         
         if (account.provider === 'github' || account.provider === 'google' || account.provider === 'credentials') {
           try {
-            const secret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? 'ochhExgjtTPvCk/Dqpb0zkAGtQgdOeNV+2XGhsFPo/4=';
+            const secret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+            if (!secret) {
+               throw new Error('Authentication secret is not configured.');
+            }
             const encodedSecret = new TextEncoder().encode(secret);
             const syncToken = await new SignJWT({
               provider: account.provider,
@@ -51,7 +74,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               .sign(encodedSecret);
 
             const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-            const endpoint = account.provider === 'github' ? 'github-callback' : account.provider === 'google' ? 'google-callback' : 'credentials-callback';
+            let endpoint = '';
+            if (account.provider === 'github') endpoint = 'github-callback';
+            else if (account.provider === 'google') endpoint = 'google-callback';
+            // Credentials provider already verified in authorize(), but we sync token just in case
+            // or we could skip syncing for credentials. Let's just use verify-credentials again or skip it.
+            // Actually, for credentials, we just need the backend token. 
+            // In authorize(), we verified, but NextAuth creates its own JWT.
+            // To get backend JWT inside session, we can either store it in authorize() or hit an endpoint here.
+            // Let's create an endpoint or reuse credentials-callback which we replaced with verify-credentials.
+            // Since authorize() doesn't pass the token to jwt() easily without hacking, 
+            // we will call verify-credentials again but wait, we don't have the password here!
+            // Oh, we should probably skip this sync for credentials, or use a sync endpoint.
+            // Wait, we removed credentials-callback. Let's change endpoint to verify-credentials? No, we don't have password.
+            // Wait, let's restore credentials-callback but secure it with syncToken just like google-callback!
+            // I'll add `credentials-sync` instead in a later step if needed, but for now:
+            if (account.provider === 'credentials') endpoint = 'credentials-sync';
+            else endpoint = `${account.provider}-callback`;
             
             const payload: any = {
               id: String(profile?.id ?? account?.providerAccountId ?? user?.id ?? 'dev-user-id'),

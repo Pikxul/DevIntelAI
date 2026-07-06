@@ -1,0 +1,481 @@
+DevIntel AI — User Story & Product Story
+
+Imagine Acme Corp, a growing SaaS company with 80 engineers.
+
+The CTO, John, is frustrated.
+
+Every week:
+
+Developers push code.
+Deployments happen.
+Production incidents occur.
+Nobody knows who approved what.
+Engineering managers struggle to understand delivery risk.
+Teams work in silos.
+
+John wants visibility and control without micromanaging developers.
+
+That's when Acme Corp adopts DevIntel AI.
+
+Chapter 1 — Getting Started
+
+John visits DevIntel AI.
+
+Instead of being dropped into a dashboard full of charts, he sees:
+
+"Get Started"
+
+He clicks Sign Up.
+
+He can choose:
+
+Google Authentication
+Org Email Authentication
+
+After authentication, John creates his organization:
+
+Organization Name:
+Acme Corp
+
+Since John created the organization, he automatically becomes:
+
+Organization Owner
+Chapter 2 — Building His Team
+
+John doesn't want everyone to have unlimited access.
+
+So DevIntel AI gives him complete control.
+
+From the Organization Settings page, he manually invites employees.
+
+He adds:
+
+Alice
+
+Platform Engineer
+
+Role:
+
+DevOps Engineer
+Bob
+
+Reliability Engineer
+
+Role:
+
+SRE Engineer
+Charlie
+
+Senior Software Developer
+
+Role:
+
+Developer
+David
+
+Security Specialist
+
+Role:
+
+Security Engineer
+Emma
+
+Engineering Manager
+
+Role:
+
+Admin
+Sarah
+
+CTO Dashboard Access
+
+Role:
+
+Viewer / Executive
+
+Nobody can register themselves into Acme Corp.
+
+Only organization members invited by John can join.
+
+This ensures strict enterprise security.
+
+Chapter 3 — Organization Structure
+Acme Corp
+        │
+        ▼
+Organization Owner
+        │
+        ▼
+Admin
+        │
+ ┌──────┼──────────┬─────────┬──────────┐
+ ▼      ▼          ▼         ▼          ▼
+DevOps  SRE     Security    Devs     Viewer
+Chapter 4 — Permissions
+Organization Owner
+
+John has full control.
+
+He can:
+
+Add users
+Remove users
+Assign roles
+Configure organization settings
+Manage repositories
+View all dashboards
+Admin
+
+Emma can:
+
+Manage projects
+View analytics
+Manage teams
+Invite members
+
+But cannot:
+
+Delete the organization
+Manage billing
+DevOps Engineer
+
+Alice can:
+
+Connect repositories
+Manage pipelines
+Monitor deployments
+Trigger synchronizations
+SRE Engineer
+
+Bob can:
+
+Handle incidents
+Monitor reliability
+Investigate failures
+View DORA metrics
+Security Engineer
+
+David can:
+
+Define policies
+Manage governance
+Review audit logs
+Analyze security risks
+Developers
+
+Charlie can:
+
+View repositories
+View AI reviews
+View recommendations
+
+But cannot:
+
+Add users
+Change policies
+Viewer / Executive
+
+Sarah can:
+
+View dashboards
+View reports
+View analytics
+
+But cannot modify anything.
+
+Chapter 5 — Connecting Engineering Systems
+
+Alice, the DevOps Engineer, connects:
+
+GitHub
+
+and selects repositories:
+
+Frontend
+
+Backend
+
+Payments
+
+Mobile App
+
+DevIntel AI synchronizes:
+
+Commits
+Pull Requests
+Deployments
+Chapter 6 — Developers Continue Working Normally
+
+Developers don't need to learn a new tool.
+
+They simply:
+
+Push Code
+↓
+Create Pull Request
+↓
+Merge
+
+Everything happens naturally inside GitHub.
+
+Chapter 7 — DevIntel AI Becomes The Brain
+
+Whenever code changes:
+
+GitHub Event
+↓
+DevIntel AI
+
+The platform analyzes:
+
+Code changes
+Repository history
+Previous incidents
+Deployment trends
+Sensitive files
+
+Then AI generates:
+
+Risk Score
+
+Low
+Medium
+High
+Critical
+Chapter 8 — Governance
+
+Suppose a risky deployment touches:
+
+Payment Service
+Database Migration
+
+Risk Score:
+
+91/100
+
+DevIntel AI recommends:
+
+Manager Approval Required
+
+Security Engineer David reviews the risk.
+
+Admin Emma approves.
+
+Deployment proceeds.
+
+Chapter 9 — Visibility Across The Organization
+
+Everyone sees only what they are allowed to see.
+
+John (Owner)
+
+Sees everything.
+
+Bob (SRE)
+
+Sees incidents and reliability.
+
+Alice (DevOps)
+
+Sees deployment activities.
+
+Charlie (Developer)
+
+Sees only his projects.
+
+Sarah (Executive)
+
+Sees high-level business metrics.
+
+Chapter 10 — Incident Happens
+
+Two days later production slows down.
+
+Bob opens DevIntel AI.
+
+The platform tells him:
+
+Incident Started:
+2:15 PM
+
+Related Deployment:
+#143
+
+Commit:
+abc123
+
+Approved By:
+Emma
+
+Repository:
+Payments Service
+
+Risk Score:
+91
+
+Root Cause:
+Database Migration
+
+The team immediately understands:
+
+What changed
+Who approved it
+Which deployment introduced the problem
+
+Without endless meetings.
+
+
+The Organization is the tenant, and the organization owner/admin controls who joins and what they can do. Users never get unrestricted access.
+
+Think of the hierarchy like this:
+
+Platform
+   ↓
+Organization (Company)
+   ↓
+Users
+   ↓
+Roles
+   ↓
+Permissions
+
+For DevIntel AI, I would recommend:
+
+1. Organization Owner
+
+Usually:
+
+CTO
+VP Engineering
+Platform Engineering Head
+
+Permissions:
+
+✅ Create organization
+
+✅ Invite users
+
+✅ Remove users
+
+✅ Assign roles
+
+✅ Configure SSO
+
+✅ Configure policies
+
+✅ Billing
+
+✅ Audit logs
+
+✅ Full access
+
+2. Admin
+
+Usually:
+
+Engineering Managers
+Platform Leads
+
+Permissions:
+
+✅ Invite users
+
+✅ Remove users
+
+✅ Manage repositories
+
+✅ Manage policies
+
+✅ View incidents
+
+✅ View analytics
+
+❌ Billing
+
+❌ Delete organization
+
+3. DevOps Engineer
+
+Permissions:
+
+✅ Connect repositories
+
+✅ Manage pipelines
+
+✅ View AI reviews
+
+✅ View deployments
+
+✅ View incidents
+
+❌ User management
+
+❌ Billing
+
+4. SRE Engineer
+
+Permissions:
+
+✅ Incident management
+
+✅ Root Cause Analysis
+
+✅ Alerts
+
+✅ Monitoring
+
+✅ DORA metrics
+
+❌ User management
+
+5. Security Engineer
+
+Permissions:
+
+✅ Governance
+
+✅ Risk policies
+
+✅ Audit logs
+
+✅ Compliance
+
+❌ Repository administration
+
+6. Developer
+
+Permissions:
+
+✅ View repositories
+
+✅ View AI reviews
+
+✅ View their deployments
+
+✅ View recommendations
+
+❌ Change policies
+
+❌ User management
+
+❌ Organization settings
+
+7. Viewer / Executive
+
+Usually:
+
+CTO
+Directors
+Product Managers
+
+Permissions:
+
+✅ Dashboards
+
+✅ Analytics
+
+✅ DORA metrics
+
+✅ Reports
+
+❌ Operational changes

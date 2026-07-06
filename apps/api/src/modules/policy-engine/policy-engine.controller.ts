@@ -3,13 +3,13 @@ import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PolicyEngineService } from './policy-engine.service';
 import { PipelinePolicy } from '../../entities/PipelinePolicy';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
+import { RequirePermission } from '../auth/permissions.decorator';
+import { PermissionsGuard } from '../auth/permissions.guard';
 import { GovernanceService } from '../governance/governance.service';
 
 @ApiTags('policies')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @Controller('policies')
 export class PolicyEngineController {
   constructor(
@@ -18,14 +18,14 @@ export class PolicyEngineController {
   ) {}
 
   @Get()
-  @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
+  @RequirePermission('policy:read')
   @ApiOperation({ summary: 'List policies for an organization' })
   getPolicies(@Request() req: any) {
     return this.service.getPolicies(req.user.organizationId);
   }
 
   @Post()
-  @Roles('manager', 'admin', 'owner')
+  @RequirePermission('policy:write')
   @ApiOperation({ summary: 'Create a new pipeline policy' })
   async createPolicy(@Body() dto: Partial<PipelinePolicy>, @Request() req: any) {
     const policy = await this.service.createPolicy({ ...dto, organizationId: req.user.organizationId });
@@ -45,7 +45,7 @@ export class PolicyEngineController {
   }
 
   @Put(':id')
-  @Roles('manager', 'admin', 'owner')
+  @RequirePermission('policy:write')
   @ApiOperation({ summary: 'Update a pipeline policy' })
   async updatePolicy(@Param('id') id: string, @Body() dto: Partial<PipelinePolicy>, @Request() req: any) {
     const policy = await this.service.updatePolicy(id, dto, req.user.organizationId);
@@ -65,7 +65,7 @@ export class PolicyEngineController {
   }
 
   @Patch(':id/toggle')
-  @Roles('manager', 'admin', 'owner')
+  @RequirePermission('policy:write')
   @ApiOperation({ summary: 'Toggle a policy enabled/disabled' })
   async togglePolicy(@Param('id') id: string, @Request() req: any) {
     const policies = await this.service.getPolicies(req.user.organizationId);
@@ -91,7 +91,7 @@ export class PolicyEngineController {
   }
 
   @Delete(':id')
-  @Roles('manager', 'admin', 'owner')
+  @RequirePermission('policy:write')
   @ApiOperation({ summary: 'Delete a pipeline policy' })
   async deletePolicy(@Param('id') id: string, @Request() req: any) {
     const policies = await this.service.getPolicies(req.user.organizationId);

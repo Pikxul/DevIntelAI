@@ -3,18 +3,18 @@ import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AnalyticsService } from './analytics.service';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
+import { RequirePermission } from '../auth/permissions.decorator';
+import { PermissionsGuard } from '../auth/permissions.guard';
 
 @ApiTags('analytics')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @Controller('analytics')
 export class AnalyticsController {
   constructor(private readonly service: AnalyticsService) {}
 
   @Get('dora')
-  @Roles('viewer', 'developer', 'manager', 'admin', 'owner')
+  @RequirePermission('analytics:view')
   @ApiOperation({ summary: 'Get DORA four key metrics for an organization' })
   getDora(
     @Request() req: any,
@@ -29,7 +29,7 @@ export class AnalyticsController {
   }
 
   @Get('dora/export')
-  @Roles('manager', 'admin', 'owner')
+  @RequirePermission('analytics:view')
   @ApiOperation({ summary: 'Export DORA metrics in CSV format for compliance reporting' })
   async exportDoraMetrics(
     @Res() res: Response,

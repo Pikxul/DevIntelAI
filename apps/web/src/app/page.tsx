@@ -47,7 +47,6 @@ export default function LandingPage() {
             <span style={{ fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em' }}>DevIntel<span className="gradient-text">AI</span></span>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="btn btn-secondary btn-sm" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>Dashboard</Link>
             <Link href="/auth/signin" className="btn btn-primary btn-sm">Get Started</Link>
           </div>
         </div>
