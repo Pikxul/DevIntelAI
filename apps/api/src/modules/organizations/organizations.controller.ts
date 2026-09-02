@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Logger,
@@ -16,9 +17,10 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { DataSource, Repository } from 'typeorm';
-import { User, Organization } from '../../entities';
+import * as crypto from 'crypto';
+import { User, Organization, InvitationEntity, AuditLogEntity } from '../../entities';
 import { SkipTenantCheck } from '../auth/skip-tenant-check.decorator';
 import { RequirePermission } from '../auth/permissions.decorator';
 import { PermissionsGuard } from '../auth/permissions.guard';
@@ -54,6 +56,15 @@ class CreateOrgDto {
   slug: string;
 }
 
+class CreateInvitationDto {
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  @IsIn(['admin', 'devops_engineer', 'sre_engineer', 'security_engineer', 'developer', 'viewer'])
+  role: string;
+}
+
 @ApiTags('organizations')
 @ApiBearerAuth()
 @Controller('organizations')
@@ -65,6 +76,8 @@ export class OrganizationsController {
   constructor(
     @InjectRepository(Organization) private orgRepo: Repository<Organization>,
     @InjectRepository(User) private userRepo: Repository<User>,
+    @InjectRepository(InvitationEntity) private invitationRepo: Repository<InvitationEntity>,
+    @InjectRepository(AuditLogEntity) private auditLogRepo: Repository<AuditLogEntity>,
     private dataSource: DataSource,
   ) {}
 
@@ -158,7 +171,7 @@ export class OrganizationsController {
         const user = await this.findCurrentUser(manager.getRepository(User), userId, userEmail);
         if (user) {
           user.organizationId = createdOrg.id;
-          user.role = user.role || 'admin';
+          user.role = 'owner';
           await manager.save(user);
         } else if (userEmail) {
           await manager.save(
@@ -166,7 +179,7 @@ export class OrganizationsController {
               email: userEmail,
               name: req.user?.name || userEmail,
               organizationId: createdOrg.id,
-              role: 'admin',
+              role: 'owner',
               provider: 'credentials',
             }),
           );
@@ -188,6 +201,146 @@ export class OrganizationsController {
       }
       throw err;
     }
+  }
+
+  // ─── Invitations Management ───────────────────────────────────────────────────
+
+  @Get(':idOrSlug/invitations')
+  @RequirePermission('user:invite')
+  @ApiOperation({ summary: 'List pending invitations for an organization' })
+  async getInvitations(@Param('idOrSlug') idOrSlug: string, @Request() req: any) {
+    const org = await this.orgRepo.findOne({
+      where: this.isUuid(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug },
+    });
+    if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
+
+    const reqOrgId = this.getRequestOrganizationId(req);
+    if (reqOrgId !== org.id && reqOrgId !== org.slug && reqOrgId !== 'default-org') {
+      throw new ForbiddenException('You do not have access to this organization');
+    }
+
+    return this.invitationRepo.find({
+      where: { organizationId: org.id, status: 'pending' },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  @Post(':idOrSlug/invitations')
+  @RequirePermission('user:invite')
+  @ApiOperation({ summary: 'Invite a new member to the organization' })
+  async createInvitation(
+    @Param('idOrSlug') idOrSlug: string,
+    @Body() body: CreateInvitationDto,
+    @Request() req: any,
+  ) {
+    const org = await this.orgRepo.findOne({
+      where: this.isUuid(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug },
+    });
+    if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
+
+    const reqOrgId = this.getRequestOrganizationId(req);
+    if (reqOrgId !== org.id && reqOrgId !== org.slug && reqOrgId !== 'default-org') {
+      throw new ForbiddenException('You do not have access to this organization');
+    }
+
+    const email = body.email.toLowerCase().trim();
+    const existingUser = await this.userRepo.findOne({
+      where: { email, organizationId: org.id },
+    });
+    if (existingUser) {
+      throw new ConflictException('User is already a member of this organization');
+    }
+
+    // Check if pending invitation already exists
+    let invitation = await this.invitationRepo.findOne({
+      where: { email, organizationId: org.id, status: 'pending' },
+    });
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiration
+
+    if (invitation) {
+      invitation.role = body.role;
+      invitation.token = token;
+      invitation.expiresAt = expiresAt;
+      invitation.invitedBy = req.user?.email || 'owner';
+    } else {
+      invitation = this.invitationRepo.create({
+        email,
+        organizationId: org.id,
+        role: body.role,
+        token,
+        invitedBy: req.user?.email || 'owner',
+        status: 'pending',
+        expiresAt,
+      });
+    }
+
+    const saved = await this.invitationRepo.save(invitation);
+
+    // Audit log
+    try {
+      const log = this.auditLogRepo.create({
+        organizationId: org.id,
+        userId: this.getRequestUserId(req) || 'system',
+        userEmail: req.user?.email || 'owner',
+        action: 'user:invite',
+        resource: 'invitation',
+        resourceId: saved.id,
+        details: `Invited ${email} with role ${body.role}`,
+      });
+      await this.auditLogRepo.save(log);
+    } catch (e: any) {
+      this.logger.warn(`Failed to write audit log for invitation: ${e.message}`);
+    }
+
+    this.logger.log(`Invitation created for ${email} in org ${org.id} with role ${body.role}`);
+    return saved;
+  }
+
+  @Delete(':idOrSlug/invitations/:invitationId')
+  @RequirePermission('user:invite')
+  @ApiOperation({ summary: 'Cancel/Revoke a pending invitation' })
+  async cancelInvitation(
+    @Param('idOrSlug') idOrSlug: string,
+    @Param('invitationId') invitationId: string,
+    @Request() req: any,
+  ) {
+    const org = await this.orgRepo.findOne({
+      where: this.isUuid(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug },
+    });
+    if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
+
+    const reqOrgId = this.getRequestOrganizationId(req);
+    if (reqOrgId !== org.id && reqOrgId !== org.slug && reqOrgId !== 'default-org') {
+      throw new ForbiddenException('You do not have access to this organization');
+    }
+
+    const invitation = await this.invitationRepo.findOne({
+      where: { id: invitationId, organizationId: org.id },
+    });
+    if (!invitation) throw new NotFoundException('Invitation not found');
+
+    await this.invitationRepo.delete(invitation.id);
+
+    // Audit log
+    try {
+      const log = this.auditLogRepo.create({
+        organizationId: org.id,
+        userId: this.getRequestUserId(req) || 'system',
+        userEmail: req.user?.email || 'owner',
+        action: 'user:cancel_invite',
+        resource: 'invitation',
+        resourceId: invitationId,
+        details: `Revoked invitation for ${invitation.email}`,
+      });
+      await this.auditLogRepo.save(log);
+    } catch (e: any) {
+      this.logger.warn(`Failed to write audit log for canceled invitation: ${e.message}`);
+    }
+
+    return { success: true };
   }
 
   private getRequestUserId(req: any): string | undefined {

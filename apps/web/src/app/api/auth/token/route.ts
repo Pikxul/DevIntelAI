@@ -12,7 +12,10 @@ import { SignJWT } from 'jose';
 export async function GET() {
   const session = await auth();
 
-  const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || 'ochhExgjtTPvCk/Dqpb0zkAGtQgdOeNV+2XGhsFPo/4=';
+  const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+  if (!secret) {
+    return NextResponse.json({ error: 'Server misconfiguration: authentication secret not set' }, { status: 500 });
+  }
   const encodedSecret = new TextEncoder().encode(secret);
 
   if (!session?.user) {

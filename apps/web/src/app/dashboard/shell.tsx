@@ -6,20 +6,21 @@ import { signOut } from 'next-auth/react';
 import { Session } from 'next-auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, GitBranch, Bot, Rocket, AlertTriangle, BarChart3, ShieldAlert, Folder, Settings, Cpu, LogOut, Search, Send } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
 
 const navItems = [
-  { href: '/dashboard', icon: <Zap size={16} />, label: 'Overview' },
-  { href: '/dashboard/pipelines', icon: <GitBranch size={16} />, label: 'Pipelines' },
-  { href: '/dashboard/ai-review', icon: <Bot size={16} />, label: 'AI Review' },
-  { href: '/dashboard/deployments', icon: <Rocket size={16} />, label: 'Deployments' },
-  { href: '/dashboard/incidents', icon: <AlertTriangle size={16} />, label: 'Incidents' },
-  { href: '/dashboard/monitoring', icon: <BarChart3 size={16} />, label: 'Observability' },
-  { href: '/dashboard/governance', icon: <ShieldAlert size={16} />, label: 'Governance' },
+  { href: '/dashboard', icon: <Zap size={16} />, label: 'Overview', permission: 'dashboard:view' },
+  { href: '/dashboard/pipelines', icon: <GitBranch size={16} />, label: 'Pipelines', permission: 'pipeline:view' },
+  { href: '/dashboard/ai-review', icon: <Bot size={16} />, label: 'AI Review', permission: 'ai_review:view' },
+  { href: '/dashboard/deployments', icon: <Rocket size={16} />, label: 'Deployments', permission: 'deployment:view' },
+  { href: '/dashboard/incidents', icon: <AlertTriangle size={16} />, label: 'Incidents', permission: 'incident:view' },
+  { href: '/dashboard/monitoring', icon: <BarChart3 size={16} />, label: 'Observability', permission: 'monitoring:view' },
+  { href: '/dashboard/governance', icon: <ShieldAlert size={16} />, label: 'Governance', permission: 'governance:view' },
 ];
 
 const settingsItems = [
-  { href: '/dashboard/projects', icon: <Folder size={16} />, label: 'Projects' },
-  { href: '/dashboard/settings', icon: <Settings size={16} />, label: 'Settings' },
+  { href: '/dashboard/projects', icon: <Folder size={16} />, label: 'Projects', permissionAny: ['repo:connect', 'repo:view'] },
+  { href: '/dashboard/settings', icon: <Settings size={16} />, label: 'Settings', permission: 'org:settings' },
 ];
 
 // Bottom nav shows only key 5 items on mobile
@@ -45,6 +46,7 @@ interface Props {
 export default function DashboardShell({ children, session }: Props) {
   const pathname = usePathname();
   const router = useRouter();
+  const { can, canAny, roleLabel, roleBadgeColor } = usePermissions();
 
   const [activeWorkspace, setActiveWorkspace] = useState(WORKSPACES[0]);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
@@ -299,7 +301,7 @@ export default function DashboardShell({ children, session }: Props) {
         </div>
 
         <p className="nav-section-label">Pipeline Intelligence</p>
-        {navItems.map((item) => (
+        {navItems.filter((item) => can((item as any).permission)).map((item) => (
           <Link
             key={item.href}
             href={item.href}
@@ -312,7 +314,11 @@ export default function DashboardShell({ children, session }: Props) {
         ))}
 
         <p className="nav-section-label">Configuration</p>
-        {settingsItems.map((item) => (
+        {settingsItems.filter((item) => {
+          if ((item as any).permissionAny) return canAny((item as any).permissionAny);
+          if ((item as any).permission) return can((item as any).permission);
+          return true;
+        }).map((item) => (
           <Link
             key={item.href}
             href={item.href}
@@ -334,8 +340,10 @@ export default function DashboardShell({ children, session }: Props) {
               <div style={{ fontSize: '0.8125rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {session.user?.name ?? 'Operator User'}
               </div>
-              <div className="text-xs text-muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {session.user?.email ?? 'operator@aidevops.local'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', overflow: 'hidden' }}>
+                <span className={`badge ${roleBadgeColor}`} style={{ fontSize: '0.5625rem', padding: '1px 5px', lineHeight: 1.4 }}>
+                  {roleLabel}
+                </span>
               </div>
             </div>
           </div>

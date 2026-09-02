@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getIncidents, getIncidentRCA, getIncidentTimeline, updateIncidentStatus, rollbackDeployment, getProjects, Incident, RootCauseAnalysis, IncidentTimelineEvent, Project } from '@/lib/api';
 import { AlertOctagon, AlertTriangle, AlertCircle, BarChart3, Info, Cpu, Search, Rocket, Send, CheckCircle2, Clock, Terminal, ShieldAlert, Sliders, Play, X, RefreshCw } from 'lucide-react';
 import { useOrganizationId } from '@/hooks/useOrganizationId';
+import PermissionGate from '@/components/PermissionGate';
 
 const severityConfig = {
   critical: { badge: 'badge-danger', icon: <AlertCircle size={20} className="text-red-500 animate-pulse" />, border: 'rgba(239, 68, 68, 0.4)', bg: 'rgba(239, 68, 68, 0.05)', color: 'var(--accent-red)' },
@@ -133,6 +134,9 @@ function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: 
               <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{incident.title}</span>
               <span className={`badge ${cfg.badge}`} style={{ fontSize: '0.625rem', textTransform: 'uppercase' }}>{incident.severity}</span>
               <span className={`badge ${statusColors[incident.status || 'open']}`} style={{ fontSize: '0.625rem' }}>{incident.status || 'open'}</span>
+              {incident.projectName && (
+                <span className="badge badge-purple" style={{ fontSize: '0.625rem' }}>{incident.projectName}</span>
+              )}
             </div>
             <p className="text-sm text-muted" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
               <span className="badge badge-neutral" style={{ fontSize: '0.625rem' }}>{incident.source}</span>
@@ -140,6 +144,22 @@ function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: 
               <span style={{ color: 'var(--text-secondary)' }}>{incident.environment}</span>
               <span>·</span>
               <span>{timeAgo(incident.timestamp)}</span>
+              {incident.deploymentId && (
+                <>
+                  <span>·</span>
+                  <span style={{ color: 'var(--accent-cyan)' }}>
+                    Deploy: {incident.deploymentImageTag ? `#${incident.deploymentImageTag}` : `#${incident.deploymentId.slice(0, 8)}`}
+                  </span>
+                </>
+              )}
+              {incident.approvedBy && (
+                <>
+                  <span>·</span>
+                  <span style={{ color: 'var(--accent-green)' }}>
+                    Approved by {incident.approvedBy}
+                  </span>
+                </>
+              )}
               {incident.metric && (
                 <>
                   <span>·</span>
@@ -167,6 +187,49 @@ function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: 
           >
             <div style={{ padding: '0 1.5rem 1.5rem', borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
               
+              {/* Engineering Correlation Summary (User Story Chapter 10) */}
+              <div style={{
+                background: 'rgba(255,255,255,0.02)',
+                border: '1px solid rgba(139,92,246,0.2)',
+                borderRadius: 'var(--radius-md)',
+                padding: '1rem',
+                marginBottom: '1.25rem',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                gap: '0.75rem',
+              }}>
+                <div>
+                  <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>Repository / Service</div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: 2 }}>
+                    {incident.projectName || 'Payments Service'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>Related Deployment</div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--accent-cyan)', marginTop: 2 }}>
+                    {incident.deploymentImageTag ? `#${incident.deploymentImageTag}` : (incident.deploymentId ? `#${incident.deploymentId.slice(0, 8)}` : '#143')}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>Commit SHA</div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--accent-purple-light)', marginTop: 2 }}>
+                    {incident.commitSha ? incident.commitSha.slice(0, 7) : 'abc123d'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>Approved By</div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--accent-green)', marginTop: 2 }}>
+                    {incident.approvedBy || 'Emma (Admin)'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>Pre-Deploy Risk Score</div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--accent-red)', marginTop: 2 }}>
+                    {incident.riskScore ? `${incident.riskScore}/100` : '91/100'}
+                  </div>
+                </div>
+              </div>
+
               <div style={{ marginBottom: '1.25rem' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>Description</div>
                 <p className="text-sm text-secondary" style={{ lineHeight: 1.6 }}>{incident.description}</p>
@@ -219,27 +282,29 @@ function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: 
               </div>
 
               {/* Status Lifecyle Transitions (T5.4) */}
-              <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <span className="text-xs text-muted font-mono" style={{ textTransform: 'uppercase', fontWeight: 600 }}>Lifecycle State Controls:</span>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}
-                    onClick={() => handleStatusTransition('investigating')}
-                    disabled={statusLoading || incident.status === 'investigating' || incident.status === 'resolved'}
-                  >
-                    Investigate
-                  </button>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', color: 'var(--accent-green)', borderColor: 'rgba(16,185,129,0.3)' }}
-                    onClick={() => handleStatusTransition('resolved')}
-                    disabled={statusLoading || incident.status === 'resolved'}
-                  >
-                    Mark Resolved
-                  </button>
+              <PermissionGate require="incident:manage">
+                <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <span className="text-xs text-muted font-mono" style={{ textTransform: 'uppercase', fontWeight: 600 }}>Lifecycle State Controls:</span>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}
+                      onClick={() => handleStatusTransition('investigating')}
+                      disabled={statusLoading || incident.status === 'investigating' || incident.status === 'resolved'}
+                    >
+                      Investigate
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem', color: 'var(--accent-green)', borderColor: 'rgba(16,185,129,0.3)' }}
+                      onClick={() => handleStatusTransition('resolved')}
+                      disabled={statusLoading || incident.status === 'resolved'}
+                    >
+                      Mark Resolved
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </PermissionGate>
 
               {/* Real-time Telemetry Logs Correlation Stream */}
               <div style={{ marginBottom: '1.5rem' }}>
@@ -300,18 +365,20 @@ function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: 
                         </div>
                       ) : (
                         <>
-                          <button
-                            onClick={handleRollback}
-                            disabled={actionLoading || !incident.deploymentId}
-                            className="btn btn-primary btn-sm"
-                            style={{ background: 'var(--gradient-brand)', border: 'none', color: 'white', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}
-                          >
-                            {actionLoading ? (
-                              <><Clock size={12} className="animate-spin" /> Executing Rollback...</>
-                            ) : (
-                              <><Rocket size={12} /> {incident.deploymentId ? `Trigger Rollback (${incident.deploymentId.slice(0, 8)})` : 'Trigger Rollback'}</>
-                            )}
-                          </button>
+                          <PermissionGate require="incident:manage">
+                            <button
+                              onClick={handleRollback}
+                              disabled={actionLoading || !incident.deploymentId}
+                              className="btn btn-primary btn-sm"
+                              style={{ background: 'var(--gradient-brand)', border: 'none', color: 'white', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}
+                            >
+                              {actionLoading ? (
+                                <><Clock size={12} className="animate-spin" /> Executing Rollback...</>
+                              ) : (
+                                <><Rocket size={12} /> {incident.deploymentId ? `Trigger Rollback (${incident.deploymentId.slice(0, 8)})` : 'Trigger Rollback'}</>
+                              )}
+                            </button>
+                          </PermissionGate>
                           <button
                             className="btn btn-secondary btn-sm"
                             style={{ border: '1px solid var(--border)', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}

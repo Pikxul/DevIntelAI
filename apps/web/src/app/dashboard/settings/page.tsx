@@ -1,7 +1,10 @@
 'use client';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
-import { Settings, Bot, Link2, Sliders, Bell, CheckCircle, XCircle } from 'lucide-react';
+import { Settings, Bot, Link2, Sliders, Bell, CheckCircle, XCircle, Users, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
+import PermissionGate from '@/components/PermissionGate';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface SettingRow {
   key: string;
@@ -13,6 +16,8 @@ interface SettingRow {
 }
 
 export default function SettingsPage() {
+  const { can } = usePermissions();
+  const canEdit = can('org:settings');
   const [settings, setSettings] = useState<SettingRow[]>([
     { key: 'ai_provider', label: 'Primary AI Provider', description: 'The default provider used for code reviews and anomaly detection.', type: 'select', value: 'Gemini 2.0 Flash', options: ['Gemini 2.0 Flash', 'Claude 3.5 Sonnet', 'GPT-4o'] },
     { key: 'risk_threshold', label: 'Pipeline Block Threshold', description: 'Block a pipeline if the AI risk score exceeds this value (0–100).', type: 'input', value: '70' },
@@ -36,8 +41,31 @@ export default function SettingsPage() {
           </h1>
           <p className="page-subtitle">Platform configuration, AI model preferences, and integrations</p>
         </div>
-        <button className="btn btn-primary">Save Changes</button>
+        <PermissionGate require="org:settings">
+          <button className="btn btn-primary">Save Changes</button>
+        </PermissionGate>
       </div>
+
+      {/* Read-only notice for non-owners */}
+      {!canEdit && (
+        <div
+          style={{
+            padding: '0.75rem 1.25rem',
+            marginBottom: '1.5rem',
+            background: 'rgba(245, 158, 11, 0.06)',
+            border: '1px solid rgba(245, 158, 11, 0.2)',
+            borderRadius: 'var(--radius-md)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.625rem',
+            fontSize: '0.875rem',
+            color: 'var(--accent-yellow)',
+          }}
+        >
+          <Settings size={16} />
+          <span>Settings are <strong>read-only</strong>. Only the Organization Owner can modify platform settings.</span>
+        </div>
+      )}
 
       {/* AI Configuration */}
       <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
@@ -47,7 +75,7 @@ export default function SettingsPage() {
         <p className="text-sm text-muted" style={{ marginBottom: '1.5rem' }}>Configure AI providers and risk scoring behavior</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
           {settings.slice(0, 4).map((s, i) => (
-            <SettingItem key={s.key} setting={s} index={i} onUpdate={update} />
+            <SettingItem key={s.key} setting={s} index={i} onUpdate={update} canEdit={canEdit} />
           ))}
         </div>
       </div>
@@ -60,8 +88,29 @@ export default function SettingsPage() {
         <p className="text-sm text-muted" style={{ marginBottom: '1.5rem' }}>Connect external services and notification channels</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
           {settings.slice(4, 6).map((s, i) => (
-            <SettingItem key={s.key} setting={s} index={i} onUpdate={update} />
+            <SettingItem key={s.key} setting={s} index={i} onUpdate={update} canEdit={canEdit} />
           ))}
+        </div>
+      </div>
+
+      {/* Team & Member Invitations */}
+      <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h3 style={{ marginBottom: '0.375rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Users size={18} className="text-emerald-400" /> Organization Team & Access Control
+            </h3>
+            <p className="text-sm text-muted" style={{ margin: 0 }}>
+              Manually invite employees (DevOps, SRE, Security, Developers, Viewers) and manage 7-tier enterprise roles.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/governance"
+            className="btn btn-secondary btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}
+          >
+            Manage Team & Invites <ArrowRight size={14} />
+          </Link>
         </div>
       </div>
 
@@ -126,7 +175,7 @@ export default function SettingsPage() {
         <p className="text-sm text-muted" style={{ marginBottom: '1.5rem' }}>Anomaly detection tuning and data retention policies</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
           {settings.slice(6).map((s, i) => (
-            <SettingItem key={s.key} setting={s} index={i} onUpdate={update} />
+            <SettingItem key={s.key} setting={s} index={i} onUpdate={update} canEdit={canEdit} />
           ))}
         </div>
       </div>
@@ -134,7 +183,7 @@ export default function SettingsPage() {
   );
 }
 
-function SettingItem({ setting, index, onUpdate }: { setting: SettingRow; index: number; onUpdate: (k: string, v: string | boolean) => void }) {
+function SettingItem({ setting, index, onUpdate, canEdit }: { setting: SettingRow; index: number; onUpdate: (k: string, v: string | boolean) => void; canEdit: boolean }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -155,11 +204,12 @@ function SettingItem({ setting, index, onUpdate }: { setting: SettingRow; index:
       <div>
         {setting.type === 'toggle' && (
           <button
-            onClick={() => onUpdate(setting.key, !setting.value)}
+            onClick={() => canEdit && onUpdate(setting.key, !setting.value)}
             style={{
-              width: 48, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
+              width: 48, height: 26, borderRadius: 13, border: 'none', cursor: canEdit ? 'pointer' : 'not-allowed',
               background: setting.value ? 'var(--accent-green)' : 'rgba(255,255,255,0.1)',
               position: 'relative', transition: 'background 0.2s',
+              opacity: canEdit ? 1 : 0.6,
             }}
           >
             <div style={{
@@ -173,12 +223,15 @@ function SettingItem({ setting, index, onUpdate }: { setting: SettingRow; index:
         {setting.type === 'select' && (
           <select
             value={setting.value as string}
-            onChange={e => onUpdate(setting.key, e.target.value)}
+            onChange={e => canEdit && onUpdate(setting.key, e.target.value)}
+            disabled={!canEdit}
             style={{
               background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
-              padding: '0.4rem 0.75rem', fontSize: '0.875rem', outline: 'none', cursor: 'pointer',
+              padding: '0.4rem 0.75rem', fontSize: '0.875rem', outline: 'none',
+              cursor: canEdit ? 'pointer' : 'not-allowed',
               minWidth: 180,
+              opacity: canEdit ? 1 : 0.6,
             }}
           >
             {setting.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -188,12 +241,15 @@ function SettingItem({ setting, index, onUpdate }: { setting: SettingRow; index:
           <input
             type="text"
             value={setting.value as string}
-            onChange={e => onUpdate(setting.key, e.target.value)}
+            onChange={e => canEdit && onUpdate(setting.key, e.target.value)}
+            disabled={!canEdit}
             style={{
               background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
               padding: '0.4rem 0.75rem', fontSize: '0.875rem', outline: 'none',
               width: 100, textAlign: 'center',
+              cursor: canEdit ? 'text' : 'not-allowed',
+              opacity: canEdit ? 1 : 0.6,
             }}
           />
         )}

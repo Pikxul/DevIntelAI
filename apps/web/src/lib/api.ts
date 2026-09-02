@@ -103,6 +103,13 @@ export interface Incident {
   threshold?: number;
   timestamp: string;
   status?: 'open' | 'investigating' | 'resolved';
+  resolvedAt?: string;
+  projectName?: string;
+  deploymentImageTag?: string;
+  commitSha?: string;
+  branch?: string;
+  approvedBy?: string;
+  riskScore?: number;
 }
 
 export interface RootCauseAnalysis {
@@ -199,8 +206,20 @@ export interface TeamMember {
   email: string;
   name: string;
   avatarUrl?: string;
-  role: 'admin' | 'developer' | 'viewer' | 'security_engineer';
+  role: 'owner' | 'admin' | 'devops_engineer' | 'sre_engineer' | 'security_engineer' | 'developer' | 'viewer';
   createdAt: string;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  organizationId: string;
+  role: 'owner' | 'admin' | 'devops_engineer' | 'sre_engineer' | 'security_engineer' | 'developer' | 'viewer';
+  token: string;
+  invitedBy: string;
+  status: 'pending' | 'accepted' | 'expired';
+  createdAt: string;
+  expiresAt?: string;
 }
 
 export interface ApprovalRequest {
@@ -520,6 +539,20 @@ export const getDoraMetrics = (organizationId: string, days = 30, projectId?: st
   if (projectId) params.set('projectId', projectId);
   return apiFetch<DoraMetrics>(`/analytics/dora?${params}`);
 };
+
+export const getPendingInvitations = (organizationId: string) =>
+  apiFetch<Invitation[]>(`/organizations/${organizationId}/invitations`);
+
+export const inviteTeamMember = (organizationId: string, data: { email: string; role: string }) =>
+  apiFetch<Invitation>(`/organizations/${organizationId}/invitations`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const cancelInvitation = (organizationId: string, invitationId: string) =>
+  apiFetch<{ success: boolean }>(`/organizations/${organizationId}/invitations/${invitationId}`, {
+    method: 'DELETE',
+  });
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 

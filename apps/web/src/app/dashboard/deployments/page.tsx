@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   RotateCcw
 } from 'lucide-react';
+import PermissionGate from '@/components/PermissionGate';
 
 const envColor: Record<string, string> = {
   production: 'badge-danger',
@@ -224,19 +225,21 @@ export default function DeploymentsPage() {
                       <td>
                         <div className="flex items-center gap-2">
                           {d.status === 'success' && d.previousImageTag && (
-                            <button
-                              className="btn btn-sm flex items-center gap-1"
-                              style={{
-                                background: 'rgba(239,68,68,0.1)',
-                                color: 'var(--accent-red)',
-                                border: '1px solid rgba(239,68,68,0.2)',
-                              }}
-                              onClick={() => handleRollback(d.id)}
-                              disabled={rollingBack === d.id}
-                            >
-                              {rollingBack === d.id ? <Loader2 className="animate-spin" size={12} /> : <RotateCcw size={12} />}
-                              <span>Rollback</span>
-                            </button>
+                            <PermissionGate require="deployment:rollback">
+                              <button
+                                className="btn btn-sm flex items-center gap-1"
+                                style={{
+                                  background: 'rgba(239,68,68,0.1)',
+                                  color: 'var(--accent-red)',
+                                  border: '1px solid rgba(239,68,68,0.2)',
+                                }}
+                                onClick={() => handleRollback(d.id)}
+                                disabled={rollingBack === d.id}
+                              >
+                                {rollingBack === d.id ? <Loader2 className="animate-spin" size={12} /> : <RotateCcw size={12} />}
+                                <span>Rollback</span>
+                              </button>
+                            </PermissionGate>
                           )}
                           {d.rollbackReason && (
                             <span

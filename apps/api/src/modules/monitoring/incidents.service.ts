@@ -217,14 +217,48 @@ export class IncidentsService {
     };
   }
 
-  async getIncidents(organizationId: string, projectId?: string): Promise<IncidentAlertEntity[]> {
+  async getIncidents(organizationId: string, projectId?: string): Promise<any[]> {
     const qb = this.incidentRepo.createQueryBuilder('i')
       .innerJoin('projects', 'p', 'i.projectId = p.id')
-      .where('p.organizationId = :organizationId', { organizationId });
+      .leftJoin('deployments', 'd', 'i.deploymentId = d.id')
+      .leftJoin('pipeline_runs', 'pr', 'd.pipelineRunId = pr.id')
+      .leftJoin('approval_requests', 'ar', 'ar.pipelineRunId = pr.id')
+      .leftJoin('ai_review_results', 'ai', 'ai.pipelineRunId = pr.id')
+      .where('p.organizationId = :organizationId', { organizationId })
+      .select([
+        'i.id AS id',
+        'i.projectId AS "projectId"',
+        'i.deploymentId AS "deploymentId"',
+        'i.environment AS environment',
+        'i.source AS source',
+        'i.severity AS severity',
+        'i.title AS title',
+        'i.description AS description',
+        'i.metric AS metric',
+        'i.value AS value',
+        'i.threshold AS threshold',
+        'i.status AS status',
+        'i.resolvedAt AS "resolvedAt"',
+        'i.timestamp AS timestamp',
+        'p.name AS "projectName"',
+        'd.imageTag AS "deploymentImageTag"',
+        'pr.commitSha AS "commitSha"',
+        'pr.branch AS branch',
+        'ar.reviewedBy AS "approvedBy"',
+        'ai.riskScore AS "riskScore"',
+      ]);
+
     if (projectId) {
       qb.andWhere('i.projectId = :projectId', { projectId });
     }
-    return qb.orderBy('i.timestamp', 'DESC').getMany();
+
+    const raw = await qb.orderBy('i.timestamp', 'DESC').getRawMany();
+    return raw.map(item => ({
+      ...item,
+      value: item.value ? parseFloat(item.value) : undefined,
+      threshold: item.threshold ? parseFloat(item.threshold) : undefined,
+      riskScore: typeof item.riskScore === 'object' && item.riskScore !== null ? (item.riskScore.overall ?? item.riskScore) : item.riskScore,
+    }));
   }
 
   async getRCA(incidentId: string, organizationId: string): Promise<RootCauseAnalysisEntity | null> {

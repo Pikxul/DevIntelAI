@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { AuthController } from './auth.controller';
-import { User, Organization, SSOConfiguration } from '../../entities';
+import { User, Organization, SSOConfiguration, AuditLogEntity, InvitationEntity } from '../../entities';
 
 import { ConfigService } from '@nestjs/config';
 
@@ -21,6 +21,16 @@ const mockOrgRepo = () => ({
 const mockSsoRepo = () => ({
   findOne: jest.fn(),
   create: jest.fn(),
+  save: jest.fn(),
+});
+
+const mockAuditLogRepo = () => ({
+  create: jest.fn().mockImplementation((d) => d),
+  save: jest.fn().mockImplementation((d) => Promise.resolve(d)),
+});
+
+const mockInvitationRepo = () => ({
+  findOne: jest.fn(),
   save: jest.fn(),
 });
 
@@ -43,7 +53,18 @@ describe('AuthController', () => {
         { provide: getRepositoryToken(User), useFactory: mockUserRepo },
         { provide: getRepositoryToken(Organization), useFactory: mockOrgRepo },
         { provide: getRepositoryToken(SSOConfiguration), useFactory: mockSsoRepo },
-        { provide: ConfigService, useValue: { get: jest.fn().mockImplementation((key) => key === 'NEXTAUTH_DEV_BYPASS' ? 'true' : 'mock-value') } },
+        { provide: getRepositoryToken(AuditLogEntity), useFactory: mockAuditLogRepo },
+        { provide: getRepositoryToken(InvitationEntity), useFactory: mockInvitationRepo },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockImplementation((key) => {
+              if (key === 'NEXTAUTH_DEV_BYPASS') return 'true';
+              if (key === 'ALLOW_PUBLIC_SIGNUP') return 'true';
+              return 'mock-value';
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -100,12 +121,12 @@ describe('AuthController', () => {
       };
 
       userRepo.findOne.mockResolvedValue(existingUser);
-      userRepo.save.mockResolvedValue(existingUser);
 
       const result = await controller.githubCallback(githubBody);
 
       expect(userRepo.create).not.toHaveBeenCalled();
       expect(result.token).toBe('mocked-jwt-token');
+      expect(result.user.email).toBe('user@example.com');
     });
 
     it('signs a JWT with correct payload fields', async () => {
@@ -130,6 +151,36 @@ describe('AuthController', () => {
           role: 'admin',
         }),
       );
+    });
+  });
+
+  describe('googleCallback', () => {
+    const googleBody = {
+      id: 'google-123',
+      email: 'user@gmail.com',
+      name: 'Google User',
+      avatarUrl: 'https://lh3.googleusercontent.com/photo.jpg',
+    };
+
+    it('creates a new user for Google login', async () => {
+      const mockOrg = { id: 'google-org-id', name: 'Google User\'s Organization', slug: 'google-org-slug' };
+      const mockUser = { ...googleBody, id: 'google-user-uuid', organizationId: 'google-org-id', role: 'admin', provider: 'google' };
+
+      orgRepo.create.mockReturnValue(mockOrg);
+      orgRepo.save.mockResolvedValue(mockOrg);
+      userRepo.findOne.mockResolvedValue(null);
+      userRepo.create.mockReturnValue(mockUser);
+      userRepo.save.mockResolvedValue(mockUser);
+
+      const result = await controller.googleCallback(googleBody);
+
+      expect(userRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'user@gmail.com',
+          provider: 'google',
+        }),
+      );
+      expect(result.token).toBe('mocked-jwt-token');
     });
   });
 
@@ -167,10 +218,10 @@ describe('AuthController', () => {
       userRepo.findOne.mockResolvedValue(null);
       userRepo.create.mockReturnValue(mockUser);
       userRepo.save.mockResolvedValue(mockUser);
-      ssoRepo.findOne.mockResolvedValue({ domain: 'enterprise.com', enabled: true });
+      ssoRepo.findOne.mockResolvedValue({ domain: 'enterprise.com', enabled: true, provider: 'saml', cert: 'mock-cert' });
 
       const mockSamlAssertion = Buffer.from(
-        '<saml:Assertion><saml:NameID>auditor@enterprise.com</saml:NameID><saml:Attribute Name="name"><saml:AttributeValue>Auditor Name</saml:AttributeValue></saml:Attribute><saml:Attribute Name="organizationId"><saml:AttributeValue>enterprise-org</saml:AttributeValue></saml:Attribute></saml:Assertion>'
+        '<saml:Assertion><saml:NameID>auditor@enterprise.com</saml:NameID><saml:Attribute Name="name"><saml:AttributeValue>Auditor Name</saml:AttributeValue></saml:Attribute><saml:Attribute Name="organizationId"><saml:AttributeValue>enterprise-org</saml:AttributeValue></saml:Attribute><ds:SignatureValue>mock-sig</ds:SignatureValue></saml:Assertion>'
       ).toString('base64');
 
       const result = await controller.samlCallback({ SAMLResponse: mockSamlAssertion });
@@ -190,8 +241,10 @@ describe('AuthController', () => {
       userRepo.findOne.mockResolvedValue(null);
       userRepo.create.mockReturnValue(mockUser);
       userRepo.save.mockResolvedValue(mockUser);
+      ssoRepo.findOne.mockResolvedValue({ domain: 'enterprise.com', enabled: true, provider: 'oidc', clientSecret: 'mock-secret' });
+      (jwtService as any).verify = jest.fn().mockReturnValue({ email: 'staff@enterprise.com', name: 'Staff Member', org: 'enterprise-org' });
 
-      const header = Buffer.from(JSON.stringify({ alg: 'RS256' })).toString('base64');
+      const header = Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64');
       const payload = Buffer.from(JSON.stringify({ email: 'staff@enterprise.com', name: 'Staff Member', org: 'enterprise-org' })).toString('base64');
       const signature = 'fake-sig';
       const mockIdToken = `${header}.${payload}.${signature}`;

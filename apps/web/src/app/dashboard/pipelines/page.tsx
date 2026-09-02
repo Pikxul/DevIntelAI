@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { getPipelines, getPipelineStats, triggerPipeline, getProjects, PipelineRun, PipelineStats, Project } from '@/lib/api';
 import { GitBranch, RefreshCw, Play, Sparkles, CheckCircle2, XCircle, Clock, BarChart3, ArrowUpCircle, GitPullRequest, AlertTriangle } from 'lucide-react';
 import { useOrganizationId } from '@/hooks/useOrganizationId';
+import PermissionGate from '@/components/PermissionGate';
 
 const STAGES = ['code_push', 'ai_review', 'security_scan', 'unit_tests', 'containerize', 'deploy', 'notify'];
 const STAGE_LABELS: Record<string, string> = {
@@ -125,9 +126,11 @@ export default function PipelinesPage() {
           <button className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }} onClick={fetchData}>
             <RefreshCw size={12} /> Refresh
           </button>
-          <button className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }} onClick={() => setShowTrigger(true)}>
-            <Play size={12} className="fill-white" /> Trigger Pipeline
-          </button>
+          <PermissionGate require="pipeline:trigger">
+            <button className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }} onClick={() => setShowTrigger(true)}>
+              <Play size={12} className="fill-white" /> Trigger Pipeline
+            </button>
+          </PermissionGate>
         </div>
       </div>
 

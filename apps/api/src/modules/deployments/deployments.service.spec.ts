@@ -4,13 +4,26 @@ import { DeploymentsService } from './deployments.service';
 import { PipelinesService } from '../pipelines/pipelines.service';
 import { Deployment } from '../../entities';
 
-const mockDeploymentRepo = () => ({
-  create: jest.fn(),
-  save: jest.fn(),
-  find: jest.fn(),
-  findOne: jest.fn(),
-  update: jest.fn(),
-});
+const mockDeploymentRepo = () => {
+  const qb = {
+    innerJoin: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    take: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue([]),
+    getOne: jest.fn().mockResolvedValue(null),
+  };
+  return {
+    create: jest.fn(),
+    save: jest.fn(),
+    find: jest.fn(),
+    findOne: jest.fn(),
+    update: jest.fn(),
+    createQueryBuilder: jest.fn().mockReturnValue(qb),
+    _qb: qb,
+  };
+};
 
 const mockPipelinesService = () => ({
   updateStage: jest.fn().mockResolvedValue(undefined),
@@ -114,7 +127,7 @@ describe('DeploymentsService', () => {
 
   describe('rollback', () => {
     it('returns null when deployment has no previous image tag', async () => {
-      repo.findOne.mockResolvedValue({ id: 'dep-4', previousImageTag: null });
+      repo._qb.getOne.mockResolvedValue({ id: 'dep-4', previousImageTag: null });
       const result = await service.rollback('dep-4', 'critical anomaly', 'org1');
       expect(result).toBeNull();
       expect(repo.update).not.toHaveBeenCalled();
@@ -122,7 +135,7 @@ describe('DeploymentsService', () => {
 
     it('updates deployment status to failed and sets rollbackReason', async () => {
       const dep = { id: 'dep-5', previousImageTag: 'v1.1.0' };
-      repo.findOne
+      repo._qb.getOne
         .mockResolvedValueOnce(dep) // first call in rollback
         .mockResolvedValueOnce({ ...dep, status: 'failed', rollbackReason: 'critical anomaly' }); // return from final findOne
 
@@ -140,7 +153,7 @@ describe('DeploymentsService', () => {
     });
 
     it('returns null when deployment is not found', async () => {
-      repo.findOne.mockResolvedValue(null);
+      repo._qb.getOne.mockResolvedValue(null);
       const result = await service.rollback('nonexistent', 'reason', 'org1');
       expect(result).toBeNull();
     });
@@ -148,7 +161,7 @@ describe('DeploymentsService', () => {
 
   describe('getStats', () => {
     it('calculates correct counts from deployment list', async () => {
-      repo.find.mockResolvedValue([
+      repo._qb.getMany.mockResolvedValue([
         { status: 'success', strategy: 'rolling', rolledBackAt: null },
         { status: 'success', strategy: 'canary', rolledBackAt: null },
         { status: 'failed', strategy: 'rolling', rolledBackAt: new Date() },

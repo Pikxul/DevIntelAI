@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { getPolicies, createPolicy, updatePolicy, deletePolicy, togglePolicy, Policy } from '@/lib/api';
 import { Shield, Plus, CheckCircle2, FileText, Trash2, Edit2, ShieldAlert, ShieldCheck, ShieldOff, MinusCircle, Clock, AlertTriangle } from 'lucide-react';
 import { useOrganizationId } from '@/hooks/useOrganizationId';
+import PermissionGate from '@/components/PermissionGate';
+import AccessDenied from '@/components/AccessDenied';
 
 interface RuleState {
   field: string;
@@ -259,6 +261,7 @@ export default function PoliciesPage() {
   };
 
   return (
+    <PermissionGate require="policy:read" fallback={<AccessDenied message="You don't have permission to view pipeline governance policies." requiredPermission="policy:read" />}>
     <div className="animate-fade-in">
       {showModal && (
         <PolicyModal
@@ -278,16 +281,18 @@ export default function PoliciesPage() {
           </h1>
           <p className="page-subtitle">AI-driven policy rules, risk thresholds, and deployment gates</p>
         </div>
-        <button
-          className="btn btn-primary"
-          style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}
-          onClick={() => {
-            setEditingPolicy(null);
-            setShowModal(true);
-          }}
-        >
-          <Plus size={16} /> New Policy
-        </button>
+        <PermissionGate require="policy:write">
+          <button
+            className="btn btn-primary"
+            style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}
+            onClick={() => {
+              setEditingPolicy(null);
+              setShowModal(true);
+            }}
+          >
+            <Plus size={16} /> New Policy
+          </button>
+        </PermissionGate>
       </div>
 
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '2rem' }}>
@@ -387,26 +392,28 @@ export default function PoliciesPage() {
                       </button>
                     </td>
                     <td>
-                      <div className="flex items-center gap-2">
-                        <button
-                          className="btn btn-sm btn-secondary"
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.35rem' }}
-                          onClick={() => {
-                            setEditingPolicy(p);
-                            setShowModal(true);
-                          }}
-                        >
-                          <Edit2 size={12} />
-                        </button>
-                        <button
-                          className="btn btn-sm"
-                          style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--accent-red)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.35rem' }}
-                          onClick={() => handleDelete(p.id)}
-                          disabled={deletingId === p.id}
-                        >
-                          {deletingId === p.id ? <Clock size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                        </button>
-                      </div>
+                      <PermissionGate require="policy:write">
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.35rem' }}
+                            onClick={() => {
+                              setEditingPolicy(p);
+                              setShowModal(true);
+                            }}
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--accent-red)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.35rem' }}
+                            onClick={() => handleDelete(p.id)}
+                            disabled={deletingId === p.id}
+                          >
+                            {deletingId === p.id ? <Clock size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                          </button>
+                        </div>
+                      </PermissionGate>
                     </td>
                   </motion.tr>
                 ))}
@@ -416,5 +423,6 @@ export default function PoliciesPage() {
         )}
       </div>
     </div>
+    </PermissionGate>
   );
 }
