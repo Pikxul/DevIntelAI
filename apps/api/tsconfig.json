@@ -17,6 +17,9 @@
     "strictBindCallApply": true,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
-    "esModuleInterop": true
-  }
+    "esModuleInterop": true,
+    "rootDir": "src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts", "jest.config.js"]
 }

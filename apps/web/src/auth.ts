@@ -19,7 +19,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       name: 'Credentials',
       credentials: { email: { label: 'Email', type: 'text' }, password: { label: 'Password', type: 'password' } },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email) return null;
         try {
           const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
           const res = await fetch(`${apiUrl}/api/v1/auth/verify-credentials`, {

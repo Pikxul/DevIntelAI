@@ -83,8 +83,11 @@ export default function InstallAppPage() {
             onMouseOver={e => ((e.currentTarget as HTMLButtonElement).style.color = '#e2e2e8')}
             onMouseOut={e => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)')}
           >
-            Skip for now
+            Skip for now — Delegate to DevOps Engineer (Alice)
           </button>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textAlign: 'center', marginTop: '0.75rem', marginBottom: 0, lineHeight: 1.4 }}>
+            As Organization Owner, you can connect repositories now or delegate technical setup to your DevOps Engineer from Organization Settings.
+          </p>
         </div>
 
         {/* Right illustration panel */}

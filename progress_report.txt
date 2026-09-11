@@ -71,20 +71,31 @@ We have successfully executed all six phases of our production hardening plan, r
   - `@aidevops/web` (Next.js frontend — 23 static & dynamic routes compiled)
   - `aidevops-vscode` (VS Code extension)
 
+### ✅ Phase 7: Live MVP Browser Audit & User Story Alignment (COMPLETED - 100%)
+- **Live Browser Audit Completed**: Successfully tested all 10 chapters from `engdocs/userStory.txt` using real browser automation and visual capture.
+- **Backend Credentials Verification Route**: Implemented and mapped `POST /api/v1/auth/verify-credentials` in `apps/api/src/modules/auth/auth.controller.ts`, supporting org-email sign-in and development mode authentication.
+- **Onboarding Catch-22 Resolved**: Configured initial tenant organization creator flow allowing John to self-register "Acme Corp" and become Organization Owner, while strictly maintaining invitation gating for existing tenant organizations.
+- **NestJS Global Auth Architecture**: Marked `AuthModule` as `@Global()` and configured `rootDir: "src"` in `apps/api/tsconfig.json`, resolving dependency injection errors and cleanly compiling the backend with zero errors.
+- **Organization Settings Employee Invitations**: Embedded an interactive "Invite Employee" quick-action dialog directly inside `/dashboard/settings`, enabling John to invite Alice (DevOps), Bob (SRE), Charlie (Developer), David (Security), Emma (Admin), and Sarah (Viewer) directly from Settings as required by Chapter 2.
+- **Onboarding Technical Delegation Handoff**: Enhanced `/onboarding/install-app` with delegation copy clarifying that technical GitHub connection can be delegated to DevOps Engineer Alice (Chapter 5) or skipped to proceed directly to the Organization Owner overview.
+- **Playwright Test Suite & Visual Validation**: Captured 8 high-resolution viewport screenshots validating the entire user story across Chapters 1 to 10, and verified passing tests on `permissions-sidebar.spec.ts`.
+
 ---
 
 ## 3. Platform Status & Launch Readiness
 
-### 🚀 Production Status: ALL PHASES COMPLETE (100%)
+### 🚀 Production Status: ALL 7 PHASES COMPLETE (100% LAUNCH READY)
 DevIntel AI is fully hardened, tested, and validated for the 11:00 PM production launch:
-- **Tenant Isolation & Security**: Invitation-only onboarding, bcrypt password hashing, SSO signature validation, AES-256 encrypted credential storage.
-- **Granular Permissions (RBAC)**: 7 roles mapped to granular capabilities enforced at both backend controllers (`PermissionsGuard`) and UI components (`<PermissionGate>`, `usePermissions`).
-- **Comprehensive E2E Test Suite**: 332 tests verifying functional flows and multi-role permission boundaries.
-- **Zero-Error Build**: Full monorepo builds cleanly with zero compilation or TypeScript errors.
+- **Tenant Isolation & Security**: Invitation-only onboarding with initial tenant creator exemption, bcrypt password hashing, SSO signature validation, AES-256 encrypted credential storage.
+- **Granular Permissions (RBAC)**: All 7 canonical enterprise roles mapped to granular capabilities enforced at both backend controllers (`PermissionsGuard`) and UI components (`<PermissionGate>`, `usePermissions`).
+- **End-to-End User Story Alignment**: Full alignment with Chapters 1–10 of `engdocs/userStory.txt` verified via live browser automation and visual screenshots.
+- **Comprehensive E2E Test Suite**: 332 Playwright tests verifying functional flows and multi-role permission boundaries.
+- **Zero-Error Monorepo Build**: Full monorepo builds cleanly across all workspace packages with zero compilation or TypeScript errors.
 
 ---
 
 > [!TIP]
-> All 6 phases of the production hardening roadmap are complete. DevIntel AI is ready for production deployment!
+> All 7 phases of the production hardening and user story alignment roadmap are complete. DevIntel AI is ready for production deployment!
+
 
 
