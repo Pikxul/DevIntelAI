@@ -1,11 +1,12 @@
-import { Controller, Post, Body, Get, UseGuards, Request, Logger, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Request, Logger, UnauthorizedException, BadRequestException, ForbiddenException, Param, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { IsEmail, IsString, IsOptional } from 'class-validator';
+import { Repository, DataSource } from 'typeorm';
+import { IsEmail, IsString, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
 import { User, Organization, SSOConfiguration, AuditLogEntity, InvitationEntity } from '../../entities';
+import { PermissionsService } from './permissions.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { encrypt } from '../../utils/encryption.util';
@@ -68,6 +69,8 @@ export class AuthController {
   constructor(
     private jwtService: JwtService,
     private configService: ConfigService,
+    private permissionsService: PermissionsService,
+    private dataSource: DataSource,
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Organization) private orgRepo: Repository<Organization>,
     @InjectRepository(SSOConfiguration) private ssoRepo: Repository<SSOConfiguration>,
@@ -426,59 +429,132 @@ export class AuthController {
     const email = body.email.toLowerCase().trim();
     const password = body.password;
 
+    // ── Existing user login ──────────────────────────────────────────────
     let user = await this.userRepo.findOne({ where: { email } });
 
-    if (!user) {
-      const invitation = await this.invitationRepo.findOne({ where: { email, status: 'pending' } });
-      let org;
-      if (invitation) {
-        org = await this.orgRepo.findOne({ where: { id: invitation.organizationId } });
-        invitation.status = 'accepted';
-        await this.invitationRepo.save(invitation);
+    if (user) {
+      // Check deactivated status
+      if ((user as any).status === 'deactivated') {
+        await this.logAuthEvent(email, 'login_failed', 'Account is deactivated');
+        throw new ForbiddenException('Your account has been deactivated. Contact your organization administrator.');
       }
 
-      if (!org) {
-        const domain = email.split('@')[1]?.toLowerCase();
-        const orgName = domain && domain !== 'example.com' && domain !== 'gmail.com'
-          ? `${domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1)} Corp`
-          : 'Acme Corp';
-        const orgSlug = domain && domain !== 'example.com' && domain !== 'gmail.com'
-          ? `${domain.split('.')[0]}-corp`
-          : 'acme-corp';
-
-        org = await this.orgRepo.findOne({ where: [{ slug: orgSlug }, { name: orgName }] });
-        if (!org) {
-          org = this.orgRepo.create({
-            name: orgName,
-            slug: orgSlug,
-          });
-          org = await this.orgRepo.save(org);
-        }
-      }
-
-      const passwordHash = password ? await bcrypt.hash(password, 10) : undefined;
-      const userName = email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
-
-      user = this.userRepo.create({
-        email,
-        name: userName,
-        organizationId: org.id,
-        role: invitation ? invitation.role : 'owner',
-        provider: 'credentials',
-        password: passwordHash,
-      });
-      await this.userRepo.save(user);
-    } else {
+      // Existing user — verify password
       if (user.password && password) {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
           await this.logAuthEvent(email, 'login_failed', 'Invalid password');
           throw new UnauthorizedException('Invalid email or password');
         }
+      } else if (user.password && !password) {
+        await this.logAuthEvent(email, 'login_failed', 'Password required but not provided');
+        throw new UnauthorizedException('Password is required');
       }
+
+      await this.logAuthEvent(email, 'login_success', 'Credentials authentication', user.organizationId);
+
+      const permissions = await this.permissionsService.getUserPermissions(user.id, user.role);
+
+      const payload = {
+        sub: user.id,
+        email: user.email,
+        name: user.name,
+        org: user.organizationId,
+        role: user.role,
+      };
+
+      return {
+        token: this.jwtService.sign(payload),
+        isNew: !user.onboardingCompleted,
+        firstLogin: (user as any).firstLogin ?? false,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          avatarUrl: user.avatarUrl || '',
+          organizationId: user.organizationId,
+          role: user.role,
+          status: (user as any).status || 'active',
+          firstLogin: (user as any).firstLogin ?? false,
+          permissions,
+        },
+      };
     }
 
-    await this.logAuthEvent(email, 'login_success', 'Credentials authentication', user.organizationId);
+    // ── New user registration ────────────────────────────────────────────
+    if (!password || password.length < 4) {
+      throw new BadRequestException('Password is required (minimum 4 characters) for new accounts');
+    }
+
+    const domain = email.split('@')[1]?.toLowerCase();
+    if (!domain) {
+      throw new BadRequestException('Invalid email address');
+    }
+
+    // Check if an organization already exists for this email domain
+    const domainSlug = domain.split('.')[0];
+    const existingOrg = await this.orgRepo
+      .createQueryBuilder('org')
+      .where('org.slug LIKE :slug', { slug: `${domainSlug}%` })
+      .getOne();
+
+    // Also check for pending invitation
+    const invitation = await this.invitationRepo.findOne({ where: { email, status: 'pending' } });
+
+    if (existingOrg && !invitation) {
+      // Org exists but no invitation → reject (invitation-only)
+      await this.logAuthEvent(email, 'login_failed', `No invitation found. Organization '${existingOrg.name}' requires an invitation.`);
+      throw new UnauthorizedException(
+        'Registration is by invitation only. Contact your organization administrator for an invite.',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const userName = email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+    let org;
+    let role: string;
+
+    if (invitation) {
+      // Invited user — join the existing org with assigned role
+      org = await this.orgRepo.findOne({ where: { id: invitation.organizationId } });
+      if (!org) {
+        throw new BadRequestException('The organization for this invitation no longer exists.');
+      }
+      role = invitation.role;
+      invitation.status = 'accepted';
+      await this.invitationRepo.save(invitation);
+      this.logger.log(`Invitation accepted for ${email} → role: ${role} in org: ${org.name}`);
+    } else {
+      // First user for this domain — create org, become owner
+      const orgName = domain !== 'example.com' && domain !== 'gmail.com'
+        ? `${domainSlug.charAt(0).toUpperCase() + domainSlug.slice(1)} Corp`
+        : `${userName}'s Organization`;
+      const orgSlug = domain !== 'example.com' && domain !== 'gmail.com'
+        ? `${domainSlug}-corp`
+        : `org-${Date.now().toString(36)}`;
+
+      org = await this.orgRepo.findOne({ where: [{ slug: orgSlug }, { name: orgName }] });
+      if (!org) {
+        org = this.orgRepo.create({ name: orgName, slug: orgSlug });
+        org = await this.orgRepo.save(org);
+        this.logger.log(`New organization created: ${orgName} (${orgSlug})`);
+      }
+      role = 'owner';
+    }
+
+    user = this.userRepo.create({
+      email,
+      name: userName,
+      organizationId: org.id,
+      role,
+      provider: 'credentials',
+      password: passwordHash,
+      invitedBy: invitation ? invitation.invitedBy : undefined,
+    });
+    await this.userRepo.save(user);
+
+    await this.logAuthEvent(email, 'registration_success', `Registered as ${role}`, org.id);
 
     const payload = {
       sub: user.id,
@@ -548,6 +624,7 @@ export class AuthController {
       },
     };
   }
+
 
   @Get('sso/discover')
   @ApiOperation({ summary: 'Discover SSO Configuration for email domain' })
@@ -779,7 +856,325 @@ export class AuthController {
   @Get('me')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  getMe(@Request() req: { user: unknown }) {
-    return req.user;
+  @ApiOperation({ summary: 'Get current authenticated user profile with permissions' })
+  async getMe(@Request() req: any) {
+    const userId = req.user?.userId ?? req.user?.sub;
+    if (!userId) return req.user;
+
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    if ((user as any).status === 'deactivated') {
+      throw new ForbiddenException('Account is deactivated');
+    }
+
+    const org = await this.orgRepo.findOne({ where: { id: user.organizationId } });
+    const permissions = await this.permissionsService.getUserPermissions(user.id, user.role);
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+      organizationId: user.organizationId,
+      role: user.role,
+      status: (user as any).status || 'active',
+      firstLogin: (user as any).firstLogin ?? false,
+      onboardingCompleted: user.onboardingCompleted,
+      permissions,
+      organization: org ? {
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        status: (org as any).status || 'active',
+      } : null,
+    };
+  }
+  // ─── Organization Registration ──────────────────────────────────────────────
+
+  @Post('register-organization')
+  @ApiOperation({ summary: 'Register a new organization and owner account (atomic)' })
+  async registerOrganization(@Body() body: any) {
+    const { organizationName, ownerName, email, password } = body;
+
+    if (!organizationName || !ownerName || !email || !password) {
+      throw new BadRequestException('organizationName, ownerName, email, and password are required');
+    }
+
+    if (password.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check uniqueness
+    const existingUser = await this.userRepo.findOne({ where: { email: normalizedEmail } });
+    if (existingUser) {
+      throw new BadRequestException('An account with this email already exists');
+    }
+
+    // Generate slug
+    const baseSlug = organizationName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    let slug = baseSlug;
+    let suffix = 0;
+    while (await this.orgRepo.findOne({ where: { slug } })) {
+      suffix++;
+      slug = `${baseSlug}-${suffix}`;
+    }
+
+    // Use a transaction for atomicity
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Create organization
+      const org = this.orgRepo.create({
+        name: organizationName,
+        slug,
+        plan: 'free',
+      } as any);
+      (org as any).status = 'active';
+      const savedOrg = await queryRunner.manager.save(org) as unknown as Organization;
+
+      // Create owner user
+      const hashedPassword = await bcrypt.hash(password, 12);
+      const owner = this.userRepo.create({
+        name: ownerName,
+        email: normalizedEmail,
+        password: hashedPassword,
+        role: 'owner',
+        organizationId: savedOrg.id,
+        onboardingCompleted: false,
+      } as any);
+      (owner as any).status = 'active';
+      (owner as any).firstLogin = false;
+      const savedOwner = await queryRunner.manager.save(owner) as unknown as User;
+
+      // Assign owner role via permissions service (outside transaction – will auto-save)
+      await queryRunner.commitTransaction();
+
+      // Assign role after commit so the user exists
+      await this.permissionsService.assignUserRole(savedOwner.id, 'owner');
+
+      await this.logAuthEvent(normalizedEmail, 'org_registered', `Organization "${organizationName}" registered`, savedOrg.id);
+
+      // Issue JWT
+      const payload = {
+        sub: savedOwner.id,
+        email: savedOwner.email,
+        name: savedOwner.name,
+        org: savedOrg.id,
+        role: 'owner',
+      };
+
+      const permissions = await this.permissionsService.getUserPermissions(savedOwner.id, 'owner');
+
+      return {
+        token: this.jwtService.sign(payload),
+        isNew: true,
+        firstLogin: false,
+        user: {
+          id: savedOwner.id,
+          email: savedOwner.email,
+          name: savedOwner.name,
+          organizationId: savedOrg.id,
+          role: 'owner',
+          status: 'active',
+          firstLogin: false,
+          permissions,
+        },
+        organization: {
+          id: savedOrg.id,
+          name: savedOrg.name,
+          slug: savedOrg.slug,
+          status: 'active',
+        },
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Organization registration failed: ${error.message}`, error.stack);
+      throw new BadRequestException('Organization registration failed. Please try again.');
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  // ─── Change Password (First-Login Flow) ──────────────────────────────────────
+
+  @Post('change-password')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change password (required on first login with temporary credentials)' })
+  async changePassword(@Request() req: any, @Body() body: any) {
+    const userId = req.user?.userId ?? req.user?.sub;
+    if (!userId) {
+      throw new UnauthorizedException('Authentication required');
+    }
+
+    const { currentPassword, newPassword } = body;
+
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('New password must be at least 8 characters');
+    }
+
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // If user has a password set, verify current password
+    if (user.password && currentPassword) {
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) {
+        throw new UnauthorizedException('Current password is incorrect');
+      }
+    } else if (user.password && !currentPassword) {
+      // For firstLogin users with temp password, currentPassword is required
+      throw new BadRequestException('Current password is required');
+    }
+
+    // Hash new password and update
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    await this.userRepo.update(userId, {
+      password: hashedPassword,
+      firstLogin: false,
+    } as any);
+
+    await this.logAuthEvent(user.email, 'password_changed', 'Password changed successfully', user.organizationId);
+
+    // Return updated JWT
+    const permissions = await this.permissionsService.getUserPermissions(user.id, user.role);
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      org: user.organizationId,
+      role: user.role,
+    };
+
+    return {
+      message: 'Password changed successfully',
+      token: this.jwtService.sign(payload),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        organizationId: user.organizationId,
+        role: user.role,
+        status: (user as any).status || 'active',
+        firstLogin: false,
+        permissions,
+      },
+    };
+  }
+
+  // ─── Invitation Acceptance Flow ──────────────────────────────────────────────
+
+  @Get('invitations/:token')
+  @ApiOperation({ summary: 'Validate an invitation token and return details' })
+  async getInvitationByToken(@Param('token') token: string) {
+    if (!token || token.length < 16) {
+      throw new BadRequestException('Invalid invitation token');
+    }
+
+    const invitation = await this.invitationRepo.findOne({ where: { token, status: 'pending' } });
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found or already used');
+    }
+
+    // Check if expired
+    if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
+      invitation.status = 'expired';
+      await this.invitationRepo.save(invitation);
+      throw new BadRequestException('This invitation has expired. Please ask your admin for a new one.');
+    }
+
+    const org = await this.orgRepo.findOne({ where: { id: invitation.organizationId } });
+
+    return {
+      email: invitation.email,
+      role: invitation.role,
+      organizationName: org?.name || 'Unknown Organization',
+      invitedBy: invitation.invitedBy,
+      expiresAt: invitation.expiresAt,
+    };
+  }
+
+  @Post('accept-invitation')
+  @ApiOperation({ summary: 'Accept an invitation and create user account' })
+  async acceptInvitation(@Body() body: { token: string; name: string; password: string }) {
+    if (!body.token || !body.name || !body.password) {
+      throw new BadRequestException('Token, name, and password are required');
+    }
+
+    if (body.password.length < 4) {
+      throw new BadRequestException('Password must be at least 4 characters');
+    }
+
+    const invitation = await this.invitationRepo.findOne({ where: { token: body.token, status: 'pending' } });
+    if (!invitation) {
+      throw new BadRequestException('Invitation not found or already used');
+    }
+
+    if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
+      invitation.status = 'expired';
+      await this.invitationRepo.save(invitation);
+      throw new BadRequestException('This invitation has expired.');
+    }
+
+    // Check if user already exists
+    const existingUser = await this.userRepo.findOne({ where: { email: invitation.email } });
+    if (existingUser) {
+      throw new BadRequestException('An account with this email already exists. Please sign in instead.');
+    }
+
+    const org = await this.orgRepo.findOne({ where: { id: invitation.organizationId } });
+    if (!org) {
+      throw new BadRequestException('The organization for this invitation no longer exists.');
+    }
+
+    // Create the user with hashed password
+    const passwordHash = await bcrypt.hash(body.password, 10);
+    const user = this.userRepo.create({
+      email: invitation.email,
+      name: body.name.trim(),
+      organizationId: org.id,
+      role: invitation.role,
+      provider: 'credentials',
+      password: passwordHash,
+      invitedBy: invitation.invitedBy,
+    });
+    await this.userRepo.save(user);
+
+    // Mark invitation as accepted
+    invitation.status = 'accepted';
+    await this.invitationRepo.save(invitation);
+
+    await this.logAuthEvent(user.email, 'invitation_accepted', `Joined ${org.name} as ${invitation.role}`, org.id);
+    this.logger.log(`Invitation accepted: ${user.email} joined ${org.name} as ${invitation.role}`);
+
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      org: user.organizationId,
+      role: user.role,
+    };
+
+    return {
+      token: this.jwtService.sign(payload),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl || '',
+        organizationId: user.organizationId,
+        role: user.role,
+      },
+    };
   }
 }

@@ -16,6 +16,7 @@ import {
   RolePermissionEntity,
   AuditLogEntity,
   InvitationEntity,
+  UserRoleEntity,
 } from '../../entities';
 
 @Global()
@@ -39,6 +40,7 @@ import {
       RolePermissionEntity,
       AuditLogEntity,
       InvitationEntity,
+      UserRoleEntity,
     ]),
   ],
   controllers: [AuthController],

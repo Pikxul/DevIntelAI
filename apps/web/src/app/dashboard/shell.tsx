@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { Session } from 'next-auth';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, GitBranch, Bot, Rocket, AlertTriangle, BarChart3, ShieldAlert, Folder, Settings, Cpu, LogOut, Search, Send } from 'lucide-react';
+import { Zap, GitBranch, Bot, Rocket, AlertTriangle, BarChart3, ShieldAlert, Folder, Settings, Cpu, LogOut, Search, Send, Users } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 
 const navItems = [
@@ -19,6 +19,7 @@ const navItems = [
 ];
 
 const settingsItems = [
+  { href: '/dashboard/team', icon: <Users size={16} />, label: 'Team', permissionAny: ['user:invite', 'user:assign_role'] },
   { href: '/dashboard/projects', icon: <Folder size={16} />, label: 'Projects', permissionAny: ['repo:connect', 'repo:view'] },
   { href: '/dashboard/settings', icon: <Settings size={16} />, label: 'Settings', permission: 'org:settings' },
 ];

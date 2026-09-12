@@ -5,22 +5,24 @@ import DashboardShell from './shell';
 import type { Session } from 'next-auth';
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   let session = await auth();
-  if (!session && (process.env.NODE_ENV === 'development' || process.env.NEXTAUTH_DEV_BYPASS === 'true')) {
+
+  // In development, provide a session wrapper so ?__dev_role= query parameter works for browser & E2E inspection
+  if (!session && process.env.NODE_ENV === 'development') {
     session = {
-      user: {
-        id: 'dev-user',
-        name: 'John (CTO - Acme Corp)',
-        email: 'john@acme.com',
-        image: null,
-      },
-      role: 'owner',
-      organizationId: 'org-acme-corp',
-      expires: new Date(Date.now() + 86_400_000).toISOString(),
+      user: { id: 'dev-session', name: 'Dev User', email: 'dev@devintel.ai', image: null },
+      expires: new Date(Date.now() + 86400000).toISOString(),
     } as any;
   }
 
   if (!session) {
     redirect('/auth/signin');
+  }
+
+  // ── First-Login gate ─────────────────────────────────────────────────────
+  // Redirect users who still have firstLogin=true (temp password not changed)
+  const isFirstLogin = (session as any)?.firstLogin === true;
+  if (isFirstLogin) {
+    redirect('/auth/first-login');
   }
 
   // ── Onboarding gate ──────────────────────────────────────────────────────

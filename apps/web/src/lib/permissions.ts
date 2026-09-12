@@ -103,6 +103,16 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     'dora:view',
     'report:view',
   ],
+
+  analyst: [
+    'dashboard:view',
+    'analytics:view',
+    'dora:view',
+    'report:view',
+    'monitoring:view',
+    'compliance:view',
+    'audit_log:view',
+  ],
 } as const;
 
 /**
@@ -148,6 +158,7 @@ export const ROLE_LABELS: Record<string, string> = {
   sre_engineer: 'SRE Engineer',
   security_engineer: 'Security Engineer',
   developer: 'Developer',
+  analyst: 'Analyst',
   viewer: 'Viewer',
 };
 
@@ -161,5 +172,6 @@ export const ROLE_BADGE_COLORS: Record<string, string> = {
   sre_engineer: 'badge-info',
   security_engineer: 'badge-success',
   developer: 'badge-neutral',
+  analyst: 'badge-info',
   viewer: 'badge-neutral',
 };

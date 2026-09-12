@@ -5,9 +5,11 @@ export class Organization {
   @PrimaryGeneratedColumn('uuid') id: string;
   @Column({ unique: true }) name: string;
   @Column({ unique: true }) slug: string;
+  @Column({ default: 'active' }) status: string; // 'active' | 'suspended'
   @Column({ default: 'free' }) plan: string;
   @Column({ nullable: true }) githubInstallationId: number;    // GitHub App installation (Step 5)
   @CreateDateColumn() createdAt: Date;
+  @UpdateDateColumn() updatedAt: Date;
 }
 
 @Entity('users')
@@ -19,6 +21,8 @@ export class User {
   @Column({ nullable: true }) password?: string;
   @Column() organizationId: string;
   @Column({ default: 'developer' }) role: string;
+  @Column({ default: 'active' }) status: string; // 'active' | 'deactivated'
+  @Column({ default: false }) firstLogin: boolean;
   @Column({ nullable: true }) githubId: string;
   @Column({ nullable: true }) githubUsername: string;
   @Column({ nullable: true }) githubAccessToken: string;  // GitHub OAuth token for listing user's repos
@@ -26,6 +30,7 @@ export class User {
   @Column({ default: false }) onboardingCompleted: boolean;   // Tracks completion of onboarding wizard
   @Column({ nullable: true }) invitedBy?: string;
   @CreateDateColumn() createdAt: Date;
+  @UpdateDateColumn() updatedAt: Date;
 }
 
 @Entity('projects')
@@ -343,8 +348,18 @@ export class InvitationEntity {
   @Column() invitedBy: string;
   @Column({ default: 'pending' }) status: string; // 'pending' | 'accepted' | 'expired'
   @CreateDateColumn() createdAt: Date;
+  @UpdateDateColumn() updatedAt: Date;
   @Column({ type: 'timestamp', nullable: true }) expiresAt: Date;
 }
+
+@Entity('user_roles')
+export class UserRoleEntity {
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column() userId: string;
+  @Column() roleId: string;
+  @CreateDateColumn() createdAt: Date;
+}
+
 
 
 

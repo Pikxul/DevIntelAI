@@ -119,6 +119,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 token.organizationId = data.user.organizationId;
                 token.role = data.user.role;
                 token.isNewUser = !!data.isNew; // true → route to onboarding wizard
+                token.firstLogin = data.firstLogin ?? data.user?.firstLogin ?? false;
+                token.permissions = data.user.permissions ?? [];
               }
             } else {
               console.error(`Failed to sync ${account.provider} user with backend:`, await res.text());
@@ -143,6 +145,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       (session as any).provider = token.provider;
       (session as any).githubUsername = token.githubUsername;
       (session as any).isNewUser = token.isNewUser ?? false;
+      (session as any).firstLogin = token.firstLogin ?? false;
+      (session as any).permissions = token.permissions ?? [];
       return session;
     },
   },

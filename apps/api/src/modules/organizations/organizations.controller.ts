@@ -20,10 +20,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { DataSource, Repository } from 'typeorm';
 import * as crypto from 'crypto';
+import * as bcrypt from 'bcrypt';
 import { User, Organization, InvitationEntity, AuditLogEntity } from '../../entities';
 import { SkipTenantCheck } from '../auth/skip-tenant-check.decorator';
 import { RequirePermission } from '../auth/permissions.decorator';
 import { PermissionsGuard } from '../auth/permissions.guard';
+import { PermissionsService } from '../auth/permissions.service';
 
 class UpdateOrgDto {
   @IsOptional()
@@ -61,7 +63,7 @@ class CreateInvitationDto {
   email: string;
 
   @IsString()
-  @IsIn(['admin', 'devops_engineer', 'sre_engineer', 'security_engineer', 'developer', 'viewer'])
+  @IsIn(['admin', 'devops_engineer', 'sre_engineer', 'security_engineer', 'developer', 'analyst', 'viewer'])
   role: string;
 }
 
@@ -79,6 +81,7 @@ export class OrganizationsController {
     @InjectRepository(InvitationEntity) private invitationRepo: Repository<InvitationEntity>,
     @InjectRepository(AuditLogEntity) private auditLogRepo: Repository<AuditLogEntity>,
     private dataSource: DataSource,
+    private permissionsService: PermissionsService,
   ) {}
 
   @Get(':idOrSlug')
@@ -371,5 +374,212 @@ export class OrganizationsController {
 
   private isUuid(value: string): boolean {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  }
+
+  // ─── Team Management ────────────────────────────────────────────────────────
+
+  @Get(':idOrSlug/members')
+  @ApiOperation({ summary: 'List all members of the organization' })
+  @RequirePermission('manage_team')
+  async listMembers(@Param('idOrSlug') idOrSlug: string, @Request() req: any) {
+    const org = await this.orgRepo.findOne({
+      where: this.isUuid(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug },
+    });
+    if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
+
+    const members = await this.userRepo.find({
+      where: { organizationId: org.id },
+      order: { createdAt: 'ASC' },
+    });
+
+    return members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      role: m.role,
+      status: (m as any).status || 'active',
+      firstLogin: (m as any).firstLogin ?? false,
+      avatarUrl: m.avatarUrl,
+      createdAt: m.createdAt,
+    }));
+  }
+
+  @Post(':idOrSlug/members')
+  @ApiOperation({ summary: 'Create a team member with a temporary password' })
+  @RequirePermission('manage_team')
+  async createMember(
+    @Param('idOrSlug') idOrSlug: string,
+    @Body() body: any,
+    @Request() req: any,
+  ) {
+    const { name, email, role } = body;
+    if (!name || !email || !role) {
+      throw new BadRequestException('name, email, and role are required');
+    }
+
+    const validRoles = ['admin', 'devops_engineer', 'sre_engineer', 'security_engineer', 'developer', 'analyst', 'viewer'];
+    if (!validRoles.includes(role)) {
+      throw new BadRequestException(`Invalid role. Must be one of: ${validRoles.join(', ')}`);
+    }
+
+    const org = await this.orgRepo.findOne({
+      where: this.isUuid(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug },
+    });
+    if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if user already exists
+    const existingUser = await this.userRepo.findOne({ where: { email: normalizedEmail } });
+    if (existingUser) {
+      throw new ConflictException('A user with this email already exists');
+    }
+
+    // Generate temporary password
+    const tempPassword = crypto.randomBytes(6).toString('base64url').substring(0, 10);
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
+
+    // Create user
+    const user = this.userRepo.create({
+      name,
+      email: normalizedEmail,
+      password: hashedPassword,
+      role,
+      organizationId: org.id,
+      onboardingCompleted: false,
+    } as any);
+    (user as any).status = 'active';
+    (user as any).firstLogin = true;
+    const savedUser = await this.userRepo.save(user) as unknown as User;
+
+    // Assign role in permissions system
+    await this.permissionsService.assignUserRole(savedUser.id, role);
+
+    // Audit log
+    try {
+      await this.auditLogRepo.save(this.auditLogRepo.create({
+        organizationId: org.id,
+        userId: this.getRequestUserId(req) || 'system',
+        userEmail: normalizedEmail,
+        action: 'member_created',
+        resource: 'user',
+        resourceId: savedUser.id,
+        details: `Team member ${name} created with role ${role}`,
+      }));
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log for member creation: ${e.message}`);
+    }
+
+    return {
+      member: {
+        id: savedUser.id,
+        name: savedUser.name,
+        email: savedUser.email,
+        role: savedUser.role,
+        status: 'active',
+        firstLogin: true,
+      },
+      temporaryPassword: tempPassword,
+      message: `Member created. Provide them these credentials: email: ${normalizedEmail}, temporary password: ${tempPassword}`,
+    };
+  }
+
+  @Put(':idOrSlug/members/:memberId/status')
+  @ApiOperation({ summary: 'Activate or deactivate a team member' })
+  @RequirePermission('manage_team')
+  async updateMemberStatus(
+    @Param('idOrSlug') idOrSlug: string,
+    @Param('memberId') memberId: string,
+    @Body() body: { status: 'active' | 'deactivated' },
+    @Request() req: any,
+  ) {
+    if (!body.status || !['active', 'deactivated'].includes(body.status)) {
+      throw new BadRequestException('status must be "active" or "deactivated"');
+    }
+
+    const org = await this.orgRepo.findOne({
+      where: this.isUuid(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug },
+    });
+    if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
+
+    const member = await this.userRepo.findOne({ where: { id: memberId, organizationId: org.id } });
+    if (!member) throw new NotFoundException('Member not found in this organization');
+
+    // Prevent deactivating yourself
+    const requesterId = this.getRequestUserId(req);
+    if (member.id === requesterId) {
+      throw new ForbiddenException('You cannot deactivate your own account');
+    }
+
+    // Prevent deactivating the organization owner
+    if (member.role === 'owner') {
+      throw new ForbiddenException('Cannot deactivate the organization owner');
+    }
+
+    await this.userRepo.update(memberId, { status: body.status } as any);
+
+    try {
+      await this.auditLogRepo.save(this.auditLogRepo.create({
+        organizationId: org.id,
+        userId: requesterId || 'system',
+        userEmail: member.email,
+        action: body.status === 'deactivated' ? 'member_deactivated' : 'member_activated',
+        resource: 'user',
+        resourceId: memberId,
+        details: `Member ${member.name} status changed to ${body.status}`,
+      }));
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log: ${e.message}`);
+    }
+
+    return { success: true, memberId, status: body.status };
+  }
+
+  @Put(':idOrSlug/members/:memberId/role')
+  @ApiOperation({ summary: 'Change a team member\'s role' })
+  @RequirePermission('manage_team')
+  async updateMemberRole(
+    @Param('idOrSlug') idOrSlug: string,
+    @Param('memberId') memberId: string,
+    @Body() body: { role: string },
+    @Request() req: any,
+  ) {
+    const validRoles = ['admin', 'devops_engineer', 'sre_engineer', 'security_engineer', 'developer', 'analyst', 'viewer'];
+    if (!body.role || !validRoles.includes(body.role)) {
+      throw new BadRequestException(`role must be one of: ${validRoles.join(', ')}`);
+    }
+
+    const org = await this.orgRepo.findOne({
+      where: this.isUuid(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug },
+    });
+    if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
+
+    const member = await this.userRepo.findOne({ where: { id: memberId, organizationId: org.id } });
+    if (!member) throw new NotFoundException('Member not found in this organization');
+
+    // Prevent changing owner role
+    if (member.role === 'owner') {
+      throw new ForbiddenException('Cannot change the owner\'s role');
+    }
+
+    const oldRole = member.role;
+    await this.userRepo.update(memberId, { role: body.role });
+    await this.permissionsService.assignUserRole(memberId, body.role);
+
+    try {
+      await this.auditLogRepo.save(this.auditLogRepo.create({
+        organizationId: org.id,
+        userId: this.getRequestUserId(req) || 'system',
+        userEmail: member.email,
+        action: 'member_role_changed',
+        resource: 'user',
+        resourceId: memberId,
+        details: `Role changed from ${oldRole} to ${body.role}`,
+      }));
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log: ${e.message}`);
+    }
+
+    return { success: true, memberId, oldRole, newRole: body.role };
   }
 }

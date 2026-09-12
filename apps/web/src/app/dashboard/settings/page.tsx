@@ -181,7 +181,7 @@ export default function SettingsPage() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <h3 style={{ fontSize: '1.125rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
-                <UserPlus size={18} className="text-purple-400" /> Invite Employee to Acme Corp
+                <UserPlus size={18} className="text-purple-400" /> Invite Employee
               </h3>
               <button onClick={() => setShowInviteModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                 <X size={18} />
@@ -249,12 +249,12 @@ export default function SettingsPage() {
                       outline: 'none',
                     }}
                   >
-                    <option value="devops_engineer">DevOps Engineer (Alice) — Repos, Pipelines, Deployments</option>
-                    <option value="sre_engineer">SRE Engineer (Bob) — Incidents, Monitoring, Rollbacks</option>
-                    <option value="developer">Developer (Charlie) — Code, AI Reviews, PRs</option>
-                    <option value="security_engineer">Security Engineer (David) — Policies, Audit Logs, Risk</option>
-                    <option value="admin">Admin (Emma) — Teams, Projects, Approvals</option>
-                    <option value="viewer">Viewer (Sarah) — Dashboards & Reports (Read-Only)</option>
+                    <option value="devops_engineer">DevOps Engineer — Repos, Pipelines, Deployments</option>
+                    <option value="sre_engineer">SRE Engineer — Incidents, Monitoring, Rollbacks</option>
+                    <option value="developer">Developer — Code, AI Reviews, PRs</option>
+                    <option value="security_engineer">Security Engineer — Policies, Audit Logs, Risk</option>
+                    <option value="admin">Admin — Teams, Projects, Approvals</option>
+                    <option value="viewer">Viewer — Dashboards & Reports (Read-Only)</option>
                   </select>
                 </div>
 

@@ -3,7 +3,7 @@
 import { signIn, signOut, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Zap, Mail, ArrowLeft, AlertCircle, Shield, Loader2 } from 'lucide-react';
+import { Zap, Mail, ArrowLeft, AlertCircle, Shield, Loader2, Lock, Eye, EyeOff } from 'lucide-react';
 import { useState, useCallback, useEffect, useRef, Suspense, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -111,9 +111,13 @@ function SignInContent() {
 
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
 
   // Rate limiting
   const attemptsRef = useRef<number[]>([]);
@@ -218,12 +222,19 @@ function SignInContent() {
       return;
     }
 
+    if (password.length < 4) {
+      setPasswordError('Password must be at least 4 characters.');
+      setPasswordTouched(true);
+      return;
+    }
+
     if (isRateLimited()) {
       setGeneralError('Too many attempts. Please wait a moment before trying again.');
       return;
     }
 
     setEmailError(null);
+    setPasswordError(null);
     setGeneralError(null);
     setLoadingProvider('email');
 
@@ -231,12 +242,12 @@ function SignInContent() {
       const result = await signIn('credentials', {
         redirect: false,
         email: sanitized,
-        password: '', // password flow handled in Ticket 2
+        password,
         callbackUrl: '/onboarding',
       });
 
       if (result?.error) {
-        setGeneralError('Authentication failed. Please verify your email or contact your organization admin.');
+        setGeneralError('Authentication failed. Please verify your credentials or contact your organization admin.');
         setLoadingProvider(null);
       } else if (result?.url) {
         router.push(result.url);
@@ -247,7 +258,7 @@ function SignInContent() {
       setGeneralError('An unexpected error occurred. Please try again.');
       setLoadingProvider(null);
     }
-  }, [email, loadingProvider, isRateLimited, router]);
+  }, [email, password, loadingProvider, isRateLimited, router]);
 
   /**
    * Handle email input change with sanitization
@@ -395,6 +406,59 @@ function SignInContent() {
                 </div>
               )}
 
+              <div className="email-input-wrapper" style={{ position: 'relative' }}>
+                <input
+                  id="signin-password-input"
+                  type={showPassword ? 'text' : 'password'}
+                  className="email-input"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (passwordError && e.target.value.length >= 4) setPasswordError(null);
+                  }}
+                  onBlur={() => {
+                    setPasswordTouched(true);
+                    if (password && password.length < 4) setPasswordError('Password must be at least 4 characters.');
+                  }}
+                  disabled={loadingProvider !== null}
+                  autoComplete="current-password"
+                  aria-label="Password"
+                  aria-invalid={passwordTouched && !!passwordError}
+                  aria-describedby={passwordError ? 'password-error-msg' : undefined}
+                  required
+                />
+                <Lock size={16} className="email-input-icon" aria-hidden="true" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '0.75rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '0.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+
+              {passwordTouched && passwordError && (
+                <div id="password-error-msg" className="email-error" role="alert">
+                  <AlertCircle size={14} aria-hidden="true" />
+                  <span>{passwordError}</span>
+                </div>
+              )}
+
               <button
                 id="signin-email-submit-btn"
                 type="submit"
@@ -466,39 +530,20 @@ function SignInContent() {
             </>
           )}
 
-          {/* Dev Bypass — only in development */}
+          {/* Dev mode notice */}
           {isDevMode && (
-            <>
-              <div className="auth-divider" aria-hidden="true">
-                <span>dev only</span>
-              </div>
-              <button
-                id="signin-dev-bypass-btn"
-                className="auth-btn"
-                onClick={() => {
-                  if (loadingProvider) return;
-                  setLoadingProvider('credentials');
-                  signIn('credentials', {
-                    email: 'dev@acme.com',
-                    password: '',
-                    callbackUrl: '/onboarding',
-                  });
-                }}
-                disabled={loadingProvider !== null}
-                style={{
-                  background: 'rgba(239, 68, 68, 0.06)',
-                  borderColor: 'rgba(239, 68, 68, 0.2)',
-                  color: '#ef4444',
-                  borderStyle: 'dashed',
-                }}
-                aria-label="Developer bypass login"
-              >
-                <span className="auth-btn-icon">
-                  {loadingProvider === 'credentials' ? <Spinner /> : <Zap size={18} />}
-                </span>
-                {loadingProvider === 'credentials' ? 'Bypassing…' : 'Dev Bypass Login'}
-              </button>
-            </>
+            <div style={{
+              marginTop: '0.5rem',
+              padding: '0.5rem 0.75rem',
+              background: 'rgba(239, 68, 68, 0.06)',
+              border: '1px dashed rgba(239, 68, 68, 0.2)',
+              borderRadius: '0.5rem',
+              fontSize: '0.75rem',
+              color: 'rgba(239, 68, 68, 0.7)',
+              textAlign: 'center',
+            }}>
+              Development Mode — Use real credentials to sign in
+            </div>
           )}
 
           {/* Security footer */}

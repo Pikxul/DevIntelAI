@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { RoleEntity, PermissionEntity, RolePermissionEntity } from '../../entities';
+import { RoleEntity, PermissionEntity, RolePermissionEntity, UserRoleEntity } from '../../entities';
 
 /**
  * The canonical permission map derived from the user story (Chapters 4 & 9).
@@ -103,6 +103,15 @@ const ROLE_PERMISSION_SEED: Record<string, string[]> = {
     'dashboard:view',
   ],
 
+  analyst: [
+    'dashboard:view',
+    'analytics:view',
+    'dora:view',
+    'report:view',
+    'monitoring:view',
+    'audit_log:view',
+  ],
+
   viewer: [
     'dashboard:view',
     'analytics:view',
@@ -125,6 +134,8 @@ export class PermissionsService implements OnModuleInit {
     private readonly permRepo: Repository<PermissionEntity>,
     @InjectRepository(RolePermissionEntity)
     private readonly rpRepo: Repository<RolePermissionEntity>,
+    @InjectRepository(UserRoleEntity)
+    private readonly userRoleRepo: Repository<UserRoleEntity>,
   ) {}
 
   /* ------------------------------------------------------------------ */
@@ -168,6 +179,63 @@ export class PermissionsService implements OnModuleInit {
   getPermissionsForRole(role: string): string[] {
     const perms = this.cache.get(role.toLowerCase());
     return perms ? Array.from(perms) : [];
+  }
+
+  /**
+   * Assigns a role to a user in the user_roles table idempotently.
+   */
+  async assignUserRole(userId: string, roleName: string): Promise<void> {
+    const normalizedRole = roleName.toLowerCase();
+    const role = await this.roleRepo.findOne({ where: { name: normalizedRole } });
+    if (!role) {
+      this.logger.warn(`Cannot assign unknown role "${roleName}" to user "${userId}"`);
+      return;
+    }
+
+    // Delete existing role mapping for this user to maintain single primary role (or replace)
+    await this.userRoleRepo.delete({ userId });
+
+    const mapping = this.userRoleRepo.create({
+      userId,
+      roleId: role.id,
+    });
+    await this.userRoleRepo.save(mapping);
+    this.logger.log(`Assigned role "${normalizedRole}" (${role.id}) to user "${userId}"`);
+  }
+
+  /**
+   * Resolves all roles assigned to a user from user_roles and roles tables.
+   */
+  async getUserRoles(userId: string): Promise<string[]> {
+    const mappings = await this.userRoleRepo.find({ where: { userId } });
+    if (!mappings.length) return [];
+
+    const roles = await this.roleRepo.find();
+    const roleById = new Map(roles.map((r) => [r.id, r.name]));
+
+    return mappings
+      .map((m) => roleById.get(m.roleId))
+      .filter(Boolean) as string[];
+  }
+
+  /**
+   * Resolves all permissions for a user based on DB roles or fallback role.
+   */
+  async getUserPermissions(userId: string, fallbackRole?: string): Promise<string[]> {
+    const userRoles = await this.getUserRoles(userId);
+    const effectiveRoles = userRoles.length ? userRoles : (fallbackRole ? [fallbackRole] : []);
+    const permSet = new Set<string>();
+
+    for (const r of effectiveRoles) {
+      const perms = this.getPermissionsForRole(r);
+      perms.forEach((p) => permSet.add(p));
+    }
+
+    return Array.from(permSet);
+  }
+
+  async getRoleByName(roleName: string): Promise<RoleEntity | null> {
+    return this.roleRepo.findOne({ where: { name: roleName.toLowerCase() } });
   }
 
   /* ------------------------------------------------------------------ */
