@@ -28,3 +28,16 @@ db_data/
 screenshot_connected_repos.png
 .mcp.json
 
+# Generated tool output
+graphify-out/
+
+# Runtime data & crash dumps
+*.stackdump
+apps/api/var/
+
+# AI tool configs
+.claude/
+
+# One-off reports
+progress_report.txt
+
