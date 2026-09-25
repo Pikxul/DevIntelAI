@@ -380,7 +380,7 @@ export class OrganizationsController {
 
   @Get(':idOrSlug/members')
   @ApiOperation({ summary: 'List all members of the organization' })
-  @RequirePermission('manage_team')
+  @RequirePermission('user:invite')
   async listMembers(@Param('idOrSlug') idOrSlug: string, @Request() req: any) {
     const org = await this.orgRepo.findOne({
       where: this.isUuid(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug },
@@ -406,7 +406,7 @@ export class OrganizationsController {
 
   @Post(':idOrSlug/members')
   @ApiOperation({ summary: 'Create a team member with a temporary password' })
-  @RequirePermission('manage_team')
+  @RequirePermission('user:invite')
   async createMember(
     @Param('idOrSlug') idOrSlug: string,
     @Body() body: any,
@@ -486,7 +486,7 @@ export class OrganizationsController {
 
   @Put(':idOrSlug/members/:memberId/status')
   @ApiOperation({ summary: 'Activate or deactivate a team member' })
-  @RequirePermission('manage_team')
+  @RequirePermission('user:assign_role')
   async updateMemberStatus(
     @Param('idOrSlug') idOrSlug: string,
     @Param('memberId') memberId: string,
@@ -537,7 +537,7 @@ export class OrganizationsController {
 
   @Put(':idOrSlug/members/:memberId/role')
   @ApiOperation({ summary: 'Change a team member\'s role' })
-  @RequirePermission('manage_team')
+  @RequirePermission('user:assign_role')
   async updateMemberRole(
     @Param('idOrSlug') idOrSlug: string,
     @Param('memberId') memberId: string,

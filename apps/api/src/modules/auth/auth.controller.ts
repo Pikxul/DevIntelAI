@@ -482,8 +482,8 @@ export class AuthController {
     }
 
     // ── New user registration ────────────────────────────────────────────
-    if (!password || password.length < 4) {
-      throw new BadRequestException('Password is required (minimum 4 characters) for new accounts');
+    if (!password || password.length < 8) {
+      throw new BadRequestException('Password is required (minimum 8 characters) for new accounts');
     }
 
     const domain = email.split('@')[1]?.toLowerCase();
@@ -1111,8 +1111,8 @@ export class AuthController {
       throw new BadRequestException('Token, name, and password are required');
     }
 
-    if (body.password.length < 4) {
-      throw new BadRequestException('Password must be at least 4 characters');
+    if (body.password.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters');
     }
 
     const invitation = await this.invitationRepo.findOne({ where: { token: body.token, status: 'pending' } });
