@@ -1,2 +1,0 @@
-id,action,resource,resourceId,userId,userEmail,parentHash,hash,createdAt
-audit-1,"trigger","pip",1,user-1,user1@test.com,genesis-hash,d2f3c86efdd244a913809472d1d7c486b49f393873545dbae6ecc66c83abc28f,2026-09-02T16:28:43.591Z
