@@ -43,7 +43,7 @@ const ERROR_MESSAGES: Record<string, { title: string; description: string }> = {
   Callback: {
     title: 'Callback Error',
     description:
-      'Something went wrong during the authentication callback. Please try signing in again.',
+      'Something went wrong during the Authentication callback. Please try signing in again.',
   },
   Default: {
     title: 'Authentication Error',
