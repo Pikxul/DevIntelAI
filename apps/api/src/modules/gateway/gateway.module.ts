@@ -27,18 +27,25 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
   ) { }
 
   onModuleInit() {
-    // Broadcast stats every 30 seconds
+    // Broadcast stats every 30 seconds to all connected org rooms
     this.interval = setInterval(async () => {
       try {
-        // Just broadcast stats for 'default-org' for now (or loop active orgs)
-        const pipelineStats = await this.pipelinesService.getStats('default-org');
-        const aiStats = await this.aiReviewService.getReviewStats('default-org');
+        const rooms = this.server?.adapter?.rooms;
+        if (!rooms) return;
 
-        this.server.to('org:default-org').emit('dashboard:stats', { pipelineStats, aiStats });
+        for (const [room] of rooms) {
+          if (!room.startsWith('org:')) continue;
+          const orgId = room.replace('org:', '');
+
+          const pipelineStats = await this.pipelinesService.getStats(orgId);
+          const aiStats = await this.aiReviewService.getReviewStats(orgId);
+
+          this.server.to(room).emit('dashboard:stats', { pipelineStats, aiStats });
+        }
       } catch (err) {
         this.logger.error(`Failed to broadcast stats: ${err.message}`);
       }
-    }, 10000); // 10 seconds for testing, maybe 30s later
+    }, 30000);
   }
 
   onModuleDestroy() {

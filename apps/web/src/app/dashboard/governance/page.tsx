@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { useOrganizationId } from '@/hooks/useOrganizationId';
 import PermissionGate from '@/components/PermissionGate';
+import { useToast } from '@/components/Toast';
 
 const roles = ['owner', 'admin', 'devops_engineer', 'sre_engineer', 'security_engineer', 'developer', 'viewer'] as const;
 
@@ -255,6 +256,7 @@ function InviteMemberModal({
 
 function MembersTab() {
   const orgId = useOrganizationId();
+  const { showToast } = useToast();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -286,7 +288,7 @@ function MembersTab() {
       const updated = await updateMemberRole(memberId, newRole as any);
       setMembers((prev) => prev.map((m) => (m.id === memberId ? updated : m)));
     } catch (err: any) {
-      alert(`Failed: ${err.message}`);
+      showToast(`Failed: ${err.message}`, 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -298,7 +300,7 @@ function MembersTab() {
       await cancelInvitation(orgId, invitationId);
       setInvitations((prev) => prev.filter((i) => i.id !== invitationId));
     } catch (err: any) {
-      alert(`Failed to revoke invitation: ${err.message}`);
+      showToast(`Failed to revoke invitation: ${err.message}`, 'error');
     }
   };
 
@@ -454,6 +456,7 @@ function MembersTab() {
 
 function AuditTab() {
   const orgId = useOrganizationId();
+  const { showToast } = useToast();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -486,7 +489,7 @@ function AuditTab() {
       a.click();
       a.remove();
     } catch (err: any) {
-      alert(`Export failed: ${err.message}`);
+      showToast(`Export failed: ${err.message}`, 'error');
     } finally {
       setIsExporting(false);
     }
@@ -569,6 +572,7 @@ function AuditTab() {
 
 function ApprovalsTab() {
   const orgId = useOrganizationId();
+  const { showToast } = useToast();
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -591,7 +595,7 @@ function ApprovalsTab() {
       await approveRequest(id);
       loadRequests();
     } catch (err: any) {
-      alert(`Approval failed: ${err.message}`);
+      showToast(`Approval failed: ${err.message}`, 'error');
     } finally {
       setActionLoading(null);
     }
@@ -605,7 +609,7 @@ function ApprovalsTab() {
       await rejectRequest(id, reason);
       loadRequests();
     } catch (err: any) {
-      alert(`Rejection failed: ${err.message}`);
+      showToast(`Rejection failed: ${err.message}`, 'error');
     } finally {
       setActionLoading(null);
     }

@@ -93,7 +93,7 @@ export class OrganizationsController {
     if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
 
     const reqOrgId = this.getRequestOrganizationId(req);
-    if (reqOrgId !== org.id && reqOrgId !== org.slug && reqOrgId !== 'default-org') {
+    if (reqOrgId !== org.id && reqOrgId !== org.slug) {
       throw new ForbiddenException('You do not have access to this organization');
     }
 
@@ -110,7 +110,7 @@ export class OrganizationsController {
     if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
 
     const reqOrgId = this.getRequestOrganizationId(req);
-    if (reqOrgId !== org.id && reqOrgId !== org.slug && reqOrgId !== 'default-org') {
+    if (reqOrgId !== org.id && reqOrgId !== org.slug) {
       throw new ForbiddenException('You do not have access to this organization');
     }
 
@@ -218,7 +218,7 @@ export class OrganizationsController {
     if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
 
     const reqOrgId = this.getRequestOrganizationId(req);
-    if (reqOrgId !== org.id && reqOrgId !== org.slug && reqOrgId !== 'default-org') {
+    if (reqOrgId !== org.id && reqOrgId !== org.slug) {
       throw new ForbiddenException('You do not have access to this organization');
     }
 
@@ -242,7 +242,7 @@ export class OrganizationsController {
     if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
 
     const reqOrgId = this.getRequestOrganizationId(req);
-    if (reqOrgId !== org.id && reqOrgId !== org.slug && reqOrgId !== 'default-org') {
+    if (reqOrgId !== org.id && reqOrgId !== org.slug) {
       throw new ForbiddenException('You do not have access to this organization');
     }
 
@@ -316,7 +316,7 @@ export class OrganizationsController {
     if (!org) throw new NotFoundException(`Organization '${idOrSlug}' not found`);
 
     const reqOrgId = this.getRequestOrganizationId(req);
-    if (reqOrgId !== org.id && reqOrgId !== org.slug && reqOrgId !== 'default-org') {
+    if (reqOrgId !== org.id && reqOrgId !== org.slug) {
       throw new ForbiddenException('You do not have access to this organization');
     }
 

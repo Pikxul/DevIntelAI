@@ -13,6 +13,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import PermissionGate from '@/components/PermissionGate';
+import { useToast } from '@/components/Toast';
 
 const envColor: Record<string, string> = {
   production: 'badge-danger',
@@ -54,6 +55,7 @@ export default function DeploymentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [rollingBack, setRollingBack] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const fetchDeployments = useCallback(async () => {
     try {
@@ -79,7 +81,7 @@ export default function DeploymentsPage() {
       await rollbackDeployment(id, 'Manual rollback from dashboard');
       await fetchDeployments();
     } catch (err: any) {
-      alert(`Rollback failed: ${err.message}`);
+      showToast(`Rollback failed: ${err.message}`, 'error');
     } finally {
       setRollingBack(null);
     }

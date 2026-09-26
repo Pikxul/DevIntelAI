@@ -5,6 +5,7 @@ import { getIncidents, getIncidentRCA, getIncidentTimeline, updateIncidentStatus
 import { AlertOctagon, AlertTriangle, AlertCircle, BarChart3, Info, Cpu, Search, Rocket, Send, CheckCircle2, Clock, Terminal, ShieldAlert, Sliders, Play, X, RefreshCw } from 'lucide-react';
 import { useOrganizationId } from '@/hooks/useOrganizationId';
 import PermissionGate from '@/components/PermissionGate';
+import { useToast } from '@/components/Toast';
 
 const severityConfig = {
   critical: { badge: 'badge-danger', icon: <AlertCircle size={20} className="text-red-500 animate-pulse" />, border: 'rgba(239, 68, 68, 0.4)', bg: 'rgba(239, 68, 68, 0.05)', color: 'var(--accent-red)' },
@@ -24,6 +25,7 @@ function timeAgo(iso: string): string {
 }
 
 function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: () => void }) {
+  const { showToast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const [rca, setRca] = useState<RootCauseAnalysis | null>(null);
   const [rcaLoading, setRcaLoading] = useState(false);
@@ -60,7 +62,7 @@ function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: 
 
   const handleRollback = async () => {
     if (!incident.deploymentId) {
-      alert('No correlated deployment found for this incident.');
+      showToast('No correlated deployment found for this incident.', 'warning');
       return;
     }
     setActionLoading(true);
@@ -74,7 +76,7 @@ function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: 
         onRefresh();
       }, 2000);
     } catch (err: any) {
-      alert(`Rollback failed: ${err.message}`);
+      showToast(`Rollback failed: ${err.message}`, 'error');
     } finally {
       setActionLoading(false);
     }
@@ -88,7 +90,7 @@ function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: 
       await loadDiagnostics();
       onRefresh();
     } catch (err: any) {
-      alert(`Status update failed: ${err.message}`);
+      showToast(`Status update failed: ${err.message}`, 'error');
     } finally {
       setStatusLoading(false);
     }
@@ -382,7 +384,7 @@ function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: 
                           <button
                             className="btn btn-secondary btn-sm"
                             style={{ border: '1px solid var(--border)', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}
-                            onClick={() => alert('Slack Notification sent to channels #ops and #incident-warroom.')}
+                            onClick={() => showToast('Slack Notification sent to channels #ops and #incident-warroom.', 'success')}
                           >
                             <Send size={12} /> Dispatch Slack alert
                           </button>
@@ -406,6 +408,7 @@ function IncidentCard({ incident, onRefresh }: { incident: Incident; onRefresh: 
 
 // Sandbox Drawer Component (T5.6)
 function SandboxDrawer({ isOpen, onClose, onInject }: { isOpen: boolean; onClose: () => void; onInject: () => void }) {
+  const { showToast } = useToast();
   const orgId = useOrganizationId();
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -463,7 +466,7 @@ function SandboxDrawer({ isOpen, onClose, onInject }: { isOpen: boolean; onClose
 
   const handleInject = async (templatePayload: any) => {
     if (!selectedProjectId) {
-      alert('Please connect a project first before injecting simulated incidents.');
+      showToast('Please connect a project first before injecting simulated incidents.', 'warning');
       return;
     }
     setLoading(true);
@@ -482,7 +485,7 @@ function SandboxDrawer({ isOpen, onClose, onInject }: { isOpen: boolean; onClose
       onInject();
       onClose();
     } catch (err: any) {
-      alert(`Simulation failed: ${err.message}`);
+      showToast(`Simulation failed: ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
